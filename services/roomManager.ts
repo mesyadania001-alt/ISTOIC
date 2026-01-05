@@ -1,3 +1,4 @@
+
 import { DataConnection } from 'peerjs';
 import { v4 as uuidv4 } from 'uuid';
 import { debugService } from './debugService';
@@ -109,7 +110,9 @@ export class RoomManager {
             });
 
             hostConn.on('data', (data: any) => this.processPacket(data, hostConn.peer));
-            
+            hostConn.on('close', () => this.handleDisconnect(hostConn.peer));
+            hostConn.on('error', () => this.handleDisconnect(hostConn.peer));
+
             // Send Identity
             this.sendTo(hostConn.peer, 'HANDSHAKE', { name: this.myName });
             // Request Full Data Sync
@@ -183,6 +186,7 @@ export class RoomManager {
         // 3. IF HOST: RELAY (Forward) to everyone else
         // This is the Key to Multi-User Chat!
         if (this.role === 'HOST') {
+            // Forward to everyone except sender
             this.broadcast(packet, packet.senderId); 
         }
     }
@@ -237,14 +241,24 @@ export class RoomManager {
                 payload,
                 timestamp: Date.now()
             };
-            target.conn.send(packet);
+            try {
+                target.conn.send(packet);
+            } catch(e) {
+                console.error("Send Error:", e);
+                // Mark potentially dead connection
+                if(target.status === 'ONLINE') target.status = 'RECONNECTING';
+            }
         }
     }
 
     private broadcast(packet: NetworkPacket, excludeId?: string) {
         this.participants.forEach(p => {
-            if (p.id !== excludeId && p.status === 'ONLINE' && p.conn.open) {
-                p.conn.send(packet);
+            if (p.id !== excludeId && p.conn.open) {
+                try {
+                    p.conn.send(packet);
+                } catch(e) {
+                     console.error("Broadcast Error to", p.id, e);
+                }
             }
         });
     }

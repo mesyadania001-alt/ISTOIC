@@ -1,6 +1,6 @@
 
-import React, { useEffect } from 'react';
-import { ShieldAlert, ShieldCheck, X, Zap, ScanLine, Fingerprint, Check } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ShieldCheck, X, Zap, ScanLine, Fingerprint, Check, Radio, Lock, Globe } from 'lucide-react';
 
 interface ConnectionNotificationProps {
     identity: string;
@@ -10,64 +10,110 @@ interface ConnectionNotificationProps {
 }
 
 export const ConnectionNotification: React.FC<ConnectionNotificationProps> = ({ identity, peerId, onAccept, onDecline }) => {
-    
+    const [isAccepting, setIsAccepting] = useState(false);
+
     useEffect(() => {
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        // Play notification sound logic is handled in parent, but visuals are here
     }, []);
 
+    const handleAccept = () => {
+        setIsAccepting(true);
+        // Short delay for visual feedback "Verifying..."
+        setTimeout(() => {
+            onAccept();
+        }, 800);
+    };
+
     return (
-        <div className="fixed inset-0 z-[11000] bg-black/60 backdrop-blur-[2px] flex items-end justify-center animate-fade-in font-sans pointer-events-auto">
-            {/* 
-                Bottom padding logic: 
-                env(safe-area-inset-bottom) + 16px margin.
-                This floats the card ABOVE the home bar swipe area.
-            */}
-            <div className="w-full max-w-sm mx-4 mb-[calc(env(safe-area-inset-bottom)+16px)]">
+        <div className="fixed inset-0 z-[11000] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center animate-fade-in font-sans pointer-events-auto p-4">
+            
+            <div className="w-full max-w-sm bg-[#09090b] border border-emerald-500/30 rounded-[32px] overflow-hidden shadow-[0_0_50px_rgba(16,185,129,0.2)] relative animate-slide-up ring-1 ring-emerald-500/20">
                 
-                <div className="bg-[#121214] border border-white/10 rounded-[28px] overflow-hidden shadow-2xl relative animate-slide-up ring-1 ring-emerald-500/20 pointer-events-auto">
+                {/* Background FX */}
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.05] mix-blend-overlay pointer-events-none"></div>
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600 via-emerald-400 to-emerald-600 animate-[shimmer_2s_infinite]"></div>
+
+                {/* Header Section */}
+                <div className="p-8 pb-6 flex flex-col items-center text-center relative z-10">
                     
-                    {/* Security Strip */}
-                    <div className="h-1 w-full bg-gradient-to-r from-emerald-600 via-emerald-400 to-emerald-600 animate-pulse"></div>
-
-                    <div className="p-6">
-                        <div className="flex items-center gap-4 mb-5">
-                            <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center border border-emerald-500/20 shrink-0">
-                                <ShieldCheck size={24} className="text-emerald-500" />
-                            </div>
-                            <div className="min-w-0">
-                                <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></div>
-                                    INCOMING REQUEST
-                                </h3>
-                                <p className="text-lg font-bold text-white truncate leading-tight">
-                                    {identity || 'Unknown Identity'}
-                                </p>
-                                <p className="text-[10px] font-mono text-neutral-500 truncate mt-0.5">
-                                    ID: {peerId.slice(0, 12)}...
-                                </p>
-                            </div>
+                    <div className="relative mb-6">
+                        <div className="absolute inset-0 bg-emerald-500/20 rounded-full animate-ping"></div>
+                        <div className="w-20 h-20 bg-[#0a0a0b] border-2 border-emerald-500 rounded-full flex items-center justify-center relative z-10 shadow-lg shadow-emerald-500/20">
+                            <Radio size={32} className="text-emerald-500 animate-pulse" />
                         </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <button 
-                                onClick={onDecline}
-                                className="h-12 flex items-center justify-center gap-2 rounded-xl bg-white/5 hover:bg-red-500/10 border border-white/5 text-neutral-400 hover:text-red-500 transition-all active:scale-95 pointer-events-auto"
-                            >
-                                <X size={18} />
-                                <span className="text-[10px] font-black uppercase tracking-widest">DECLINE</span>
-                            </button>
-                            
-                            <button 
-                                onClick={onAccept}
-                                className="h-12 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all active:scale-95 shadow-lg shadow-emerald-900/20 pointer-events-auto"
-                            >
-                                <Check size={18} strokeWidth={3} />
-                                <span className="text-[10px] font-black uppercase tracking-widest">ACCEPT</span>
-                            </button>
+                        <div className="absolute -bottom-3 bg-emerald-950 border border-emerald-500/50 px-3 py-1 rounded-full flex items-center gap-1.5 z-20">
+                            <Lock size={10} className="text-emerald-400" />
+                            <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">E2EE_REQ</span>
                         </div>
                     </div>
+
+                    <h3 className="text-sm font-black text-emerald-500 uppercase tracking-[0.25em] mb-2 flex items-center gap-2">
+                        <Globe size={12} /> INCOMING_UPLINK
+                    </h3>
+                    
+                    <h2 className="text-3xl font-black text-white leading-none tracking-tight mb-2">
+                        {identity || 'UNKNOWN_PEER'}
+                    </h2>
+                    
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/5">
+                        <Fingerprint size={12} className="text-neutral-500" />
+                        <code className="text-[10px] font-mono text-neutral-400 tracking-wider">
+                            ID: {peerId.slice(0, 8)}...{peerId.slice(-4)}
+                        </code>
+                    </div>
+                </div>
+
+                {/* Action Section */}
+                <div className="p-4 bg-zinc-900/50 border-t border-white/5 grid grid-cols-2 gap-4">
+                    <button 
+                        onClick={onDecline}
+                        disabled={isAccepting}
+                        className="h-16 rounded-2xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-500 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                        <X size={20} />
+                        <span className="text-[9px] font-black uppercase tracking-widest">DECLINE</span>
+                    </button>
+                    
+                    <button 
+                        onClick={handleAccept}
+                        disabled={isAccepting}
+                        className={`h-16 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-lg ${
+                            isAccepting 
+                            ? 'bg-emerald-500 text-white cursor-wait' 
+                            : 'bg-white hover:bg-zinc-200 text-black'
+                        }`}
+                    >
+                        {isAccepting ? (
+                            <>
+                                <ScanLine size={20} className="animate-spin" />
+                                <span className="text-[9px] font-black uppercase tracking-widest">VERIFYING...</span>
+                            </>
+                        ) : (
+                            <>
+                                <Check size={20} strokeWidth={3} />
+                                <span className="text-[9px] font-black uppercase tracking-widest">CONNECT</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+
+                <div className="h-1.5 w-full bg-emerald-900/30">
+                    <div className="h-full bg-emerald-500 animate-[loading_4s_ease-in-out_infinite] w-full origin-left transform scale-x-0"></div>
                 </div>
             </div>
+
+            <style>{`
+                @keyframes shimmer {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
+                }
+                @keyframes loading {
+                    0% { transform: scaleX(0); }
+                    50% { transform: scaleX(1); }
+                    100% { transform: scaleX(0); transform-origin: right; }
+                }
+            `}</style>
         </div>
     );
 };
