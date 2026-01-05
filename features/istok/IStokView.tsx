@@ -270,7 +270,6 @@ export const IStokView: React.FC = () => {
     const peerRef = useRef<any>(null);
     const roomRef = useRef<RoomManager | null>(null); 
     const pinRef = useRef(accessPin); 
-    const isMounted = useRef(true);
     const isDestroyedRef = useRef(false); // Track intentional destruction
     const msgEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -285,7 +284,6 @@ export const IStokView: React.FC = () => {
     const [participants, setParticipants] = useState<Participant[]>([]); // New: Room Participants
     const [incomingConnectionRequest, setIncomingConnectionRequest] = useState<{ peerId: string, sas: string } | null>(null);
     const [isPeerOnline, setIsPeerOnline] = useState(false);
-    const [isPeerTyping, setIsPeerTyping] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string>('');
     const [isRelayActive, setIsRelayActive] = useState(false);
     const [showShare, setShowShare] = useState(false);
@@ -399,8 +397,6 @@ export const IStokView: React.FC = () => {
         };
     }, [myProfile.id]);
 
-    // ... (Service Worker Bridge, Focus Listener same) ...
-
     // --- IDENTITY MANAGEMENT ---
     const regenerateProfile = () => {
         const now = Date.now();
@@ -412,21 +408,28 @@ export const IStokView: React.FC = () => {
             idChangeHistory: newHistory
         };
         setMyProfile(newProfile);
-        if (peerRef.current) {
-            isDestroyedRef.current = true;
-            peerRef.current.destroy();
-            setTimeout(() => window.location.reload(), 500);
-        }
+        // Force full reload to reset PeerJS completely
+        window.location.reload();
     };
 
     // --- ZOMBIE KILLER & HEARTBEAT ---
     const nukeConnection = () => {
         if (roomRef.current) roomRef.current.leaveRoom();
         setIsPeerOnline(false);
-        setIsPeerTyping(false);
         setStage('IDLE');
         setParticipants([]);
         setMessages([]);
+    };
+
+    // --- MANUAL RECONNECT ---
+    const handleManualReconnect = () => {
+        if (peerRef.current && !peerRef.current.destroyed) {
+            console.log("Manual Reconnect Triggered...");
+            peerRef.current.reconnect();
+        } else {
+            console.log("Peer destroyed, reloading page...");
+            window.location.reload();
+        }
     };
 
     // --- CALL HANDLERS ---
@@ -473,7 +476,7 @@ export const IStokView: React.FC = () => {
 
         const initPeer = async () => {
             // Debounce initialization to prevent rapid firing (e.g. strict mode double render)
-            await new Promise(r => setTimeout(r, 200));
+            await new Promise(r => setTimeout(r, 500)); // Increased debounce for safety
             if (aborted) return;
 
             const Peer = (await import('peerjs')).default;
@@ -484,7 +487,7 @@ export const IStokView: React.FC = () => {
             // Use debug 2 for errors/warnings
             const peer = new Peer(myProfile.id, {
                 config: { iceServers },
-                debug: 2, 
+                debug: 1, // Reduced debug noise
                 secure: true
             });
 
@@ -699,6 +702,12 @@ export const IStokView: React.FC = () => {
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        // Size check (Example: limit to 2MB to prevent crash)
+        if (file.size > 2 * 1024 * 1024) {
+            alert("File terlalu besar (Maks 2MB). Gunakan IStok Titanium untuk file besar.");
+            return;
+        }
 
         if (file.type.startsWith('image/')) {
             try {
@@ -1003,9 +1012,10 @@ export const IStokView: React.FC = () => {
 
              {/* Status Overlay if disconnected */}
              {showWaiting && (
-                 <div className="absolute bottom-20 left-0 right-0 flex justify-center pointer-events-none">
+                 <div className="absolute bottom-20 left-0 right-0 flex justify-center pointer-events-auto">
                      <div className="bg-red-500/90 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2 animate-pulse">
                          <WifiOff size={12} /> WAITING_FOR_HOST
+                         <button onClick={handleManualReconnect} className="ml-2 bg-white/20 px-2 py-0.5 rounded hover:bg-white/40">RETRY</button>
                      </div>
                  </div>
              )}

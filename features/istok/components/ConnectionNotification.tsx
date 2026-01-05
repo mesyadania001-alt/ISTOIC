@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { ShieldCheck, X, Zap, ScanLine, Fingerprint, Radio, Lock, Globe, AlertTriangle } from 'lucide-react';
+
+import React, { useEffect } from 'react';
+import { ShieldCheck, X, Check, Fingerprint, Globe, Lock, AlertTriangle } from 'lucide-react';
 
 interface ConnectionNotificationProps {
     identity: string;
@@ -10,130 +11,73 @@ interface ConnectionNotificationProps {
 }
 
 export const ConnectionNotification: React.FC<ConnectionNotificationProps> = ({ identity, peerId, sasCode, onAccept, onDecline }) => {
-    const [isHolding, setIsHolding] = useState(false);
-    const [progress, setProgress] = useState(0);
-    const progressRef = useRef<number>(0);
-    const animationFrame = useRef<number>(0);
 
-    // Initial Attention Grabber
+    // Initial Attention Grabber (Vibration)
     useEffect(() => {
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 500]);
     }, []);
 
-    // Hold-to-Confirm Logic
-    useEffect(() => {
-        if (isHolding) {
-            const startTime = Date.now();
-            const DURATION = 1500; // 1.5s hold time
-
-            const animate = () => {
-                const elapsed = Date.now() - startTime;
-                const pct = Math.min((elapsed / DURATION) * 100, 100);
-                setProgress(pct);
-                
-                if (pct < 100) {
-                    animationFrame.current = requestAnimationFrame(animate);
-                } else {
-                    if (navigator.vibrate) navigator.vibrate(200);
-                    onAccept();
-                }
-            };
-            animationFrame.current = requestAnimationFrame(animate);
-        } else {
-            cancelAnimationFrame(animationFrame.current);
-            setProgress(0);
-        }
-        return () => cancelAnimationFrame(animationFrame.current);
-    }, [isHolding, onAccept]);
-
     return (
-        <div className="fixed inset-0 z-[11000] bg-black/90 backdrop-blur-xl flex items-center justify-center animate-fade-in font-sans pointer-events-auto p-6">
+        <div className="fixed inset-0 z-[12000] bg-black/95 backdrop-blur-xl flex items-center justify-center animate-fade-in font-sans pointer-events-auto p-6 touch-none">
             
-            <div className="w-full max-w-md bg-[#050505] border border-emerald-500/30 rounded-[40px] overflow-hidden shadow-[0_0_80px_rgba(16,185,129,0.15)] relative animate-slide-up ring-1 ring-emerald-500/20 group">
+            {/* Background Animated Scanlines */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(16,185,129,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(16,185,129,0.03)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none opacity-50"></div>
+            
+            <div className="w-full max-w-sm bg-[#0a0a0b] border border-emerald-500/30 rounded-[32px] overflow-hidden shadow-[0_0_80px_rgba(16,185,129,0.2)] relative animate-slide-up ring-1 ring-emerald-500/20 flex flex-col">
                 
-                {/* Holographic Scanlines */}
-                <div className="absolute inset-0 bg-[linear-gradient(rgba(16,185,129,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(16,185,129,0.03)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none"></div>
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600 via-emerald-300 to-emerald-600 animate-[shimmer_3s_infinite] shadow-[0_0_20px_#10b981]"></div>
+                {/* Header Strip */}
+                <div className="h-1 w-full bg-gradient-to-r from-emerald-600 via-emerald-300 to-emerald-600 animate-[shimmer_2s_infinite]"></div>
 
-                {/* Main Content */}
                 <div className="p-8 flex flex-col items-center text-center relative z-10">
                     
-                    {/* Security Badge */}
-                    <div className="relative mb-8">
+                    {/* Icon Identity */}
+                    <div className="relative mb-6">
                         <div className="absolute inset-0 bg-emerald-500/20 rounded-full animate-ping opacity-50"></div>
-                        <div className="w-24 h-24 bg-[#0a0a0b] border-2 border-emerald-500/50 rounded-full flex items-center justify-center relative z-10 shadow-[0_0_40px_rgba(16,185,129,0.3)]">
-                            <ShieldCheck size={40} className="text-emerald-400 animate-pulse" strokeWidth={1.5} />
-                        </div>
-                        <div className="absolute -bottom-4 bg-emerald-950 border border-emerald-500/50 px-4 py-1.5 rounded-full flex items-center gap-2 z-20 shadow-lg">
-                            <Lock size={12} className="text-emerald-400" />
-                            <span className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em]">SECURE_LINK_REQ</span>
+                        <div className="w-20 h-20 bg-[#0a0a0b] border-2 border-emerald-500/50 rounded-full flex items-center justify-center relative z-10 shadow-[0_0_40px_rgba(16,185,129,0.3)]">
+                            <ShieldCheck size={32} className="text-emerald-400 animate-pulse" strokeWidth={1.5} />
                         </div>
                     </div>
 
-                    <div className="space-y-2 mb-6">
+                    <div className="space-y-2 mb-6 w-full">
                         <h3 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.3em] flex items-center justify-center gap-2">
-                            <Globe size={12} /> INCOMING_TRANSMISSION
+                            <Globe size={12} /> INCOMING_REQ
                         </h3>
-                        <h2 className="text-3xl font-black text-white leading-none tracking-tight">
+                        <h2 className="text-2xl font-black text-white leading-tight tracking-tight break-all">
                             {identity || 'UNKNOWN_PEER'}
                         </h2>
-                        <div className="flex items-center justify-center gap-2 opacity-60">
+                        <div className="flex items-center justify-center gap-2 bg-white/5 py-1.5 rounded-full mx-auto w-fit px-4 border border-white/5">
                              <Fingerprint size={12} className="text-emerald-500"/>
-                             <span className="text-[10px] font-mono text-emerald-500 tracking-wider">ID: {peerId.slice(0, 12)}...</span>
+                             <span className="text-[10px] font-mono text-emerald-500 tracking-wider">ID: {peerId.slice(0, 8)}...</span>
                         </div>
                     </div>
 
-                    {/* SAS FINGERPRINT DISPLAY */}
+                    {/* SAS Security Code Display */}
                     {sasCode && (
-                        <div className="w-full bg-emerald-900/10 border border-emerald-500/20 rounded-2xl p-4 mb-6 relative overflow-hidden">
+                        <div className="w-full bg-emerald-950/30 border border-emerald-500/20 rounded-2xl p-4 mb-8 relative overflow-hidden">
                             <div className="flex justify-between items-center mb-2">
-                                <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest">SAFETY_FINGERPRINT</span>
-                                <AlertTriangle size={12} className="text-emerald-600" />
+                                <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1"><Lock size={10}/> SAFETY_CODE</span>
                             </div>
-                            <div className="text-2xl font-black text-white tracking-[0.5em] font-mono text-center relative z-10">
+                            <div className="text-3xl font-black text-white tracking-[0.2em] font-mono text-center relative z-10 shadow-black drop-shadow-md">
                                 {sasCode}
                             </div>
-                            <p className="text-[9px] text-neutral-500 mt-2 font-medium">Verify this code matches the sender's screen.</p>
-                            
-                            {/* Scanning Bar */}
-                            <div className="absolute top-0 bottom-0 w-1 bg-emerald-500/20 blur-sm animate-[scan_2s_linear_infinite]"></div>
+                            <p className="text-[9px] text-neutral-500 mt-2 font-medium">Pastikan kode ini sama di layar teman Anda.</p>
                         </div>
                     )}
 
-                    {/* Action Area */}
-                    <div className="grid grid-cols-1 w-full gap-4">
-                        {/* HOLD TO CONFIRM BUTTON */}
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-2 gap-4 w-full">
                         <button 
-                            onMouseDown={() => setIsHolding(true)}
-                            onMouseUp={() => setIsHolding(false)}
-                            onMouseLeave={() => setIsHolding(false)}
-                            onTouchStart={() => setIsHolding(true)}
-                            onTouchEnd={() => setIsHolding(false)}
-                            className="relative h-16 w-full bg-white rounded-2xl flex items-center justify-center overflow-hidden group/btn active:scale-95 transition-transform"
+                            onClick={onDecline}
+                            className="h-14 w-full rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95"
                         >
-                            {/* Progress Fill */}
-                            <div 
-                                className="absolute left-0 top-0 bottom-0 bg-emerald-500 transition-all duration-75 ease-linear"
-                                style={{ width: `${progress}%` }}
-                            ></div>
-                            
-                            <div className="relative z-10 flex flex-col items-center mix-blend-difference">
-                                <span className="text-[10px] font-black text-white uppercase tracking-[0.3em]">
-                                    {progress > 0 ? 'VERIFYING...' : 'HOLD TO VERIFY'}
-                                </span>
-                                <div className="flex gap-1 mt-1">
-                                    <div className="w-1 h-1 bg-white rounded-full animate-bounce"></div>
-                                    <div className="w-1 h-1 bg-white rounded-full animate-bounce delay-75"></div>
-                                    <div className="w-1 h-1 bg-white rounded-full animate-bounce delay-150"></div>
-                                </div>
-                            </div>
+                            <X size={16} /> TOLAK
                         </button>
                         
                         <button 
-                            onClick={onDecline}
-                            className="h-12 w-full rounded-2xl border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                            onClick={onAccept}
+                            className="h-14 w-full rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 animate-pulse"
                         >
-                            <X size={14} /> REJECT CONNECTION
+                            <Check size={16} strokeWidth={3} /> TERIMA
                         </button>
                     </div>
 
@@ -142,7 +86,6 @@ export const ConnectionNotification: React.FC<ConnectionNotificationProps> = ({ 
             
             <style>{`
                 @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
-                @keyframes scan { 0% { left: 0%; opacity: 0; } 50% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
             `}</style>
         </div>
     );

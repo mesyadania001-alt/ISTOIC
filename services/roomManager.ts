@@ -1,3 +1,4 @@
+
 import { DataConnection } from 'peerjs';
 import { v4 as uuidv4 } from 'uuid';
 import { debugService } from './debugService';
@@ -197,8 +198,17 @@ export class RoomManager {
                 break;
             case 'SYNC_REQ':
                 if (this.role === 'HOST') {
+                    // SAFE SYNC: Only send last 20 messages to prevent channel overflow
+                    const safeHistory = this.messageHistory.slice(-20).map(m => {
+                        // Strip large image data from history sync to be safe
+                        if (m.type === 'IMAGE' && m.content.length > 50000) {
+                            return { ...m, content: '', status: 'DATA_OMITTED_TOO_LARGE' };
+                        }
+                        return m;
+                    });
+                    
                     this.sendTo(senderId, 'SYNC_RESP', { 
-                        messages: this.messageHistory,
+                        messages: safeHistory,
                         users: this.getPublicList()
                     });
                 }
@@ -228,6 +238,12 @@ export class RoomManager {
 
     // --- 4. DATA TRANSMISSION ---
     public broadcastMessage(content: string, type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'FILE') {
+        // Size Limit Guard (WebRTC Buffer Protection)
+        if (content.length > 500000) { // Approx 500KB limit for now
+            console.error("Payload too large for P2P buffer");
+            return; 
+        }
+
         const msgPayload = {
             id: uuidv4(),
             senderId: this.myId,
