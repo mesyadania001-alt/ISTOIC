@@ -1,9 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     X, User, Trash2, Edit3, Activity, Clock, 
     Smartphone, Monitor, Circle, Search, ArrowRight, ShieldAlert,
-    Wifi, WifiOff, Zap, Eye, EyeOff, Key, Lock, Fingerprint
+    Wifi, WifiOff, Zap, Eye, EyeOff, Key, Lock, Fingerprint, RefreshCw
 } from 'lucide-react';
 
 export interface IStokSession {
@@ -16,13 +16,22 @@ export interface IStokSession {
     createdAt: number;
 }
 
+export interface IStokProfile {
+    id: string;
+    username: string;
+    created: number;
+    idChangeHistory: number[]; // Array of timestamps when ID was changed
+}
+
 interface SidebarIStokContactProps {
     isOpen: boolean;
     onClose: () => void;
     sessions: IStokSession[];
+    profile: IStokProfile;
     onSelect: (session: IStokSession) => void;
     onRename: (id: string, newName: string) => void;
     onDelete: (id: string) => void;
+    onRegenerateProfile: () => void;
     currentPeerId: string | null;
 }
 
@@ -30,9 +39,11 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
     isOpen,
     onClose,
     sessions,
+    profile,
     onSelect,
     onRename,
     onDelete,
+    onRegenerateProfile,
     currentPeerId
 }) => {
     const [search, setSearch] = useState('');
@@ -40,8 +51,45 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
     const [editName, setEditName] = useState('');
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     
+    // Identity Management State
+    const [remainingChanges, setRemainingChanges] = useState(2);
+    const [nextChangeDate, setNextChangeDate] = useState<string | null>(null);
+    
     // State to toggle PIN visibility per session ID
     const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
+
+    // --- LOGIC: RATE LIMITING (2x per Month) ---
+    useEffect(() => {
+        if (profile && profile.idChangeHistory) {
+            const now = Date.now();
+            const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+            
+            // Filter changes within last 30 days
+            const recentChanges = profile.idChangeHistory.filter(ts => ts > thirtyDaysAgo);
+            const left = Math.max(0, 2 - recentChanges.length);
+            
+            setRemainingChanges(left);
+
+            if (left === 0 && recentChanges.length > 0) {
+                // Calculate when the oldest of the recent changes "expires"
+                const oldestChange = Math.min(...recentChanges);
+                const availableAt = oldestChange + (30 * 24 * 60 * 60 * 1000);
+                setNextChangeDate(new Date(availableAt).toLocaleDateString());
+            } else {
+                setNextChangeDate(null);
+            }
+        }
+    }, [profile]);
+
+    const handleRegenerateClick = () => {
+        if (remainingChanges > 0) {
+            if (confirm(`Ganti Identitas (ID & Nama)?\n\nSisa kuota bulan ini: ${remainingChanges} kali.\nID lama tidak akan bisa dihubungi lagi.`)) {
+                onRegenerateProfile();
+            }
+        } else {
+            alert(`Kuota ganti identitas habis.\nCoba lagi setelah: ${nextChangeDate}`);
+        }
+    };
 
     const filtered = useMemo(() => {
         return sessions.filter(s => 
@@ -72,12 +120,9 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
         setRevealedPins(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
-    // Helper to get local profile ID (reads from localStorage for display)
-    const getLocalId = () => {
-        try {
-            const profile = localStorage.getItem('istok_profile_v1');
-            return profile ? JSON.parse(profile).id : 'UNKNOWN';
-        } catch { return 'UNKNOWN'; }
+    const handleCopyId = () => {
+        navigator.clipboard.writeText(profile.id);
+        alert("ID Copied to Clipboard");
     };
 
     return (
@@ -90,7 +135,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
 
             {/* Sidebar */}
             <div className={`
-                fixed inset-y-0 right-0 w-full max-w-xs sm:max-w-sm 
+                fixed inset-y-0 right-0 w-full max-w-xs sm:max-w-md
                 bg-[#09090b] border-l border-white/10 z-[2010] shadow-[0_0_50px_rgba(0,0,0,0.5)]
                 transform transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)]
                 flex flex-col font-sans
@@ -107,16 +152,40 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                     </button>
                 </div>
 
-                {/* USER IDENTITY CARD (MOVED HERE) */}
+                {/* USER IDENTITY CARD (Improved) */}
                 <div className="p-4 bg-[#050505] border-b border-white/5">
-                    <div className="flex flex-col items-center gap-2 opacity-80 p-4 rounded-xl border border-white/5 bg-white/[0.02]">
-                        <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/5 text-emerald-500">
-                            <Fingerprint size={12} />
-                            <span className="text-[10px] font-mono tracking-widest text-white">MY_IDENTITY</span>
+                    <div className="flex flex-col gap-4 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-950/10 relative overflow-hidden">
+                        {/* Background Pulse */}
+                        <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-500/10 blur-xl rounded-full animate-pulse"></div>
+
+                        <div className="flex justify-between items-start z-10">
+                            <div>
+                                <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">MY_IDENTITY</p>
+                                <h3 className="text-lg font-black text-white tracking-tight">{profile.username}</h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-[8px] font-mono px-2 py-1 rounded border ${remainingChanges > 0 ? 'border-emerald-500/30 text-emerald-500' : 'border-red-500/30 text-red-500'}`}>
+                                    CHANGES: {remainingChanges}/2
+                                </span>
+                                <button 
+                                    onClick={handleRegenerateClick}
+                                    className={`p-2 rounded-lg transition-all ${remainingChanges > 0 ? 'bg-white/5 hover:bg-white/10 text-white' : 'bg-white/5 text-neutral-600 cursor-not-allowed'}`}
+                                    title={remainingChanges > 0 ? "Generate New Identity" : `Cooldown until ${nextChangeDate}`}
+                                >
+                                    <RefreshCw size={14} />
+                                </button>
+                            </div>
                         </div>
-                        <span className="text-[9px] text-neutral-500 font-mono select-all break-all text-center">
-                            ID: {getLocalId()}
-                        </span>
+
+                        <button 
+                            onClick={handleCopyId}
+                            className="flex flex-col gap-1 p-3 bg-black/40 rounded-xl border border-emerald-500/10 hover:border-emerald-500/40 transition-all text-left group z-10"
+                        >
+                            <span className="text-[8px] text-neutral-500 font-mono">UNIQUE_ID (TAP TO COPY)</span>
+                            <code className="text-[10px] text-emerald-400 font-mono break-all group-hover:text-emerald-300">
+                                {profile.id}
+                            </code>
+                        </button>
                     </div>
                 </div>
 
@@ -127,7 +196,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                             type="text" 
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="SEARCH IDENTITIES..." 
+                            placeholder="SEARCH FREQUENCY..." 
                             className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-[10px] text-white focus:outline-none focus:border-emerald-500/50 uppercase tracking-wider placeholder:text-neutral-700 font-bold transition-all"
                         />
                     </div>

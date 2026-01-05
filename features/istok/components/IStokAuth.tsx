@@ -5,6 +5,8 @@ import {
     Fingerprint, Activity, ArrowRight, ShieldCheck,
     QrCode, Clipboard, Camera, X, Check, Loader2, Lock, Upload
 } from 'lucide-react';
+// @ts-ignore
+import jsQR from 'jsqr';
 
 interface IStokAuthProps {
     identity: string;
@@ -33,25 +35,15 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
     const [pin, setPin] = useState('');
     const [isJoining, setIsJoining] = useState(forcedMode === 'JOIN');
     const [isScanning, setIsScanning] = useState(false);
-    const [isNativeScanSupported, setIsNativeScanSupported] = useState(true);
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
-    const scanIntervalRef = useRef<any>(null);
+    const scanRef = useRef<number | null>(null);
 
     // Glitch effect
     const [glitchedIdentity, setGlitchedIdentity] = useState(identity);
 
     const isConnecting = connectionStage !== 'IDLE' && connectionStage !== 'SECURE';
-
-    // --- CHECK CAPABILITIES ---
-    useEffect(() => {
-        // BarcodeDetector is Chrome/Android only usually. 
-        // If missing, we fallback to Manual/System Camera logic.
-        if (!('BarcodeDetector' in window)) {
-            setIsNativeScanSupported(false);
-        }
-    }, []);
 
     useEffect(() => {
         if (forcedMode === 'DEFAULT') {
@@ -104,9 +96,8 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
         let foundKey = '';
 
         try {
-            // Case 1: Full URL (http://.../?connect=ID&key=PIN or .../#connect=ID&key=PIN)
+            // Case 1: Full URL
             if (text.includes('connect=') && text.includes('key=')) {
-                // Hacky parse for any URL structure
                 const connectMatch = text.match(/connect=([^&]+)/);
                 const keyMatch = text.match(/key=([^&]+)/);
                 if (connectMatch) foundId = connectMatch[1];
@@ -120,7 +111,7 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
                     foundKey = parts[1];
                 }
             }
-            // Case 3: Just ID (assume user will type PIN)
+            // Case 3: Just ID
             else {
                 foundId = text.trim();
             }
@@ -131,7 +122,6 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
             if (navigator.vibrate) navigator.vibrate(50);
             if (foundKey) {
                 setPin(foundKey);
-                // If we found both, auto trigger join
                 setTimeout(() => onJoin(foundId, foundKey), 500);
             }
         }
@@ -148,53 +138,86 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
         }
     };
 
-    // --- QR SCANNER LOGIC ---
+    // --- UNIVERSAL QR SCANNER LOGIC ---
     const startScanner = async () => {
-        if (!isNativeScanSupported) {
-            alert("Browser ini tidak mendukung in-app scanning. Gunakan kamera bawaan HP untuk scan QR Code, atau tempel link.");
-            return;
-        }
-
         try {
+            // Request Camera (Environment preferred)
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: 'environment' } 
+                video: { facingMode: { ideal: 'environment' } } 
             });
             streamRef.current = stream;
             setIsScanning(true);
             
-            const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
-            scanIntervalRef.current = setInterval(async () => {
+            // Wait for video ref to be available in DOM
+            setTimeout(() => {
                 if (videoRef.current) {
-                    try {
-                        const barcodes = await detector.detect(videoRef.current);
-                        if (barcodes.length > 0) {
-                            const rawValue = barcodes[0].rawValue;
-                            processRawInput(rawValue);
-                            stopScanner();
-                        }
-                    } catch (e) {}
+                    videoRef.current.srcObject = stream;
+                    videoRef.current.setAttribute("playsinline", "true"); // Critical for iOS
+                    videoRef.current.play().then(() => {
+                        // Start the scan loop
+                        requestAnimationFrame(scanLoop);
+                    }).catch(e => console.error("Play error:", e));
                 }
-            }, 500);
+            }, 100);
+
         } catch (err) {
             console.error("Camera error", err);
             alert("Tidak dapat mengakses kamera. Pastikan izin diberikan.");
         }
     };
 
+    const scanLoop = () => {
+        if (!videoRef.current || !streamRef.current) return;
+        
+        const video = videoRef.current;
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            // 1. Try Native BarcodeDetector (Fastest)
+            if ('BarcodeDetector' in window) {
+                const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+                detector.detect(video).then((barcodes: any[]) => {
+                    if (barcodes.length > 0) {
+                        processRawInput(barcodes[0].rawValue);
+                        stopScanner();
+                        return; // Stop loop
+                    }
+                }).catch(() => {}); // Ignore errors, continue loop
+            }
+
+            // 2. Always fallback/run jsQR as well (Robustness)
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext("2d");
+            
+            if (ctx) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                // Use imported jsQR
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert",
+                });
+
+                if (code && code.data) {
+                    processRawInput(code.data);
+                    stopScanner();
+                    return; // Stop loop
+                }
+            }
+        }
+        
+        // Continue loop
+        scanRef.current = requestAnimationFrame(scanLoop);
+    };
+
     const stopScanner = () => {
+        if (scanRef.current) cancelAnimationFrame(scanRef.current);
         if (streamRef.current) {
             streamRef.current.getTracks().forEach(t => t.stop());
             streamRef.current = null;
         }
-        if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
         setIsScanning(false);
     };
-
-    useEffect(() => {
-        if (isScanning && videoRef.current && streamRef.current) {
-            videoRef.current.srcObject = streamRef.current;
-        }
-    }, [isScanning]);
 
     useEffect(() => {
         return () => stopScanner();
@@ -207,9 +230,9 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
                 <div className="flex-1 relative overflow-hidden">
                     <video 
                         ref={videoRef} 
-                        autoPlay 
-                        playsInline 
                         className="w-full h-full object-cover"
+                        playsInline
+                        muted
                     />
                     <div className="absolute inset-0 bg-black/30"></div>
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-emerald-500/50 rounded-3xl animate-pulse flex items-center justify-center">
@@ -297,22 +320,12 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
                     </div>
 
                     <div className="grid grid-cols-5 gap-3 pt-2">
-                        {isNativeScanSupported ? (
-                            <button 
-                                onClick={startScanner}
-                                className="col-span-2 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95"
-                            >
-                                <Camera size={18} /> SCAN
-                            </button>
-                        ) : (
-                            <button 
-                                className="col-span-2 py-4 bg-white/5 border border-white/10 text-neutral-500 rounded-2xl font-bold text-[10px] uppercase tracking-wider flex flex-col items-center justify-center gap-1 cursor-not-allowed opacity-50"
-                                disabled
-                            >
-                                <span className="line-through">SCANNER</span>
-                                <span className="text-[8px]">USE CAM APP</span>
-                            </button>
-                        )}
+                        <button 
+                            onClick={startScanner}
+                            className="col-span-2 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95"
+                        >
+                            <Camera size={18} /> SCAN
+                        </button>
                         <button 
                             onClick={() => onJoin(targetId, pin)}
                             disabled={!targetId || pin.length < 4}
