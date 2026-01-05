@@ -14,9 +14,9 @@ export const ShareConnection: React.FC<ShareConnectionProps> = ({ peerId, pin, o
     const [shareUrl, setShareUrl] = useState('');
 
     useEffect(() => {
-        const baseUrl = window.location.origin;
-        // Standard Hash routing for PWA safety
-        const url = `${baseUrl}/#connect=${peerId}&key=${pin}`;
+        const baseUrl = window.location.href.split('#')[0]; // Ensure base URL is clean
+        // Standard Hash routing for PWA safety, include base path
+        const url = `${baseUrl}#connect=${peerId}&key=${pin}`;
         setShareUrl(url);
     }, [peerId, pin]);
 
