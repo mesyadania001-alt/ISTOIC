@@ -1,3 +1,4 @@
+
 // IMPORT WAJIB: Penyeimbang WebRTC untuk semua browser (Safari/Android lama)
 import 'webrtc-adapter'; 
 
@@ -14,6 +15,19 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
+
+// Register Service Worker for PWA Capabilities (Notifications & Offline)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('SW Registered:', registration.scope);
+      })
+      .catch(error => {
+        console.log('SW Registration Failed:', error);
+      });
+  });
+}
 
 // StrictMode diaktifkan untuk best practice
 root.render(

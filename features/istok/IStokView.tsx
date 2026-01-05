@@ -64,9 +64,45 @@ const triggerHaptic = (ms: number | number[]) => {
     }
 };
 
-const notifySystem = (title: string, body: string) => {
-    if ("Notification" in window && Notification.permission === "granted") {
-        new Notification(title, { body });
+// --- SMART NOTIFICATION SYSTEM V2 (SYSTEM BAR INTEGRATION) ---
+const sendSmartNotification = (title: string, body: string, peerId: string, currentTargetId: string) => {
+    // LOGIKA PINTAR:
+    // 1. Jika User sedang membuka chat dengan orang tersebut (currentTargetId === peerId) DAN aplikasi aktif -> JANGAN KIRIM NOTIF.
+    // 2. Jika User membuka aplikasi tapi di menu lain -> KIRIM NOTIF SYSTEM BAR (bukan popup in-app).
+    // 3. Jika Aplikasi di background -> KIRIM NOTIF SYSTEM BAR.
+    
+    const isAppVisible = document.visibilityState === 'visible';
+    const isChattingWithSender = isAppVisible && currentTargetId === peerId;
+
+    if (isChattingWithSender) {
+        // User sedang melihat chat, cukup mainkan suara pelan (handled by playSound elsewhere)
+        return;
+    }
+
+    // Cek Support Service Worker untuk System Notification
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'SHOW_NOTIFICATION',
+            payload: {
+                title: title,
+                body: body,
+                tag: peerId, // Grouping notif per user
+                data: { peerId: peerId } // Data untuk deep linking saat diklik
+            }
+        });
+    } else if ("Notification" in window && Notification.permission === "granted") {
+        // Fallback jika SW belum ready
+        const notif = new Notification(title, {
+            body: body,
+            icon: 'https://grainy-gradients.vercel.app/noise.svg',
+            tag: peerId,
+            vibrate: [100, 50, 100]
+        } as any);
+        notif.onclick = () => {
+            window.focus();
+            // Emit event custom agar React bisa menangkap navigasi
+            window.dispatchEvent(new CustomEvent('ISTOK_NAVIGATE', { detail: { peerId } }));
+        };
     }
 };
 
@@ -549,8 +585,31 @@ export const IStokView: React.FC = () => {
                 }
             }
         } catch(e) {}
+
+        // Listen for Service Worker clicks
+        const handleServiceWorkerMessage = (event: MessageEvent) => {
+            if (event.data && event.data.type === 'NAVIGATE_CHAT') {
+                const pid = event.data.peerId;
+                // Auto-join if saved
+                const session = sessions.find(s => s.id === pid);
+                if (session) {
+                   handleSelectContact(session);
+                }
+            }
+        };
+        navigator.serviceWorker?.addEventListener('message', handleServiceWorkerMessage);
         
-        return () => { isMounted.current = false; };
+        // Listen for internal CustomEvent from non-SW notification fallback
+        window.addEventListener('ISTOK_NAVIGATE', ((e: CustomEvent) => {
+            const pid = e.detail.peerId;
+            const session = sessions.find(s => s.id === pid);
+            if(session) handleSelectContact(session);
+        }) as EventListener);
+        
+        return () => { 
+            isMounted.current = false;
+            navigator.serviceWorker?.removeEventListener('message', handleServiceWorkerMessage);
+        };
     }, []);
 
     useEffect(() => { 
@@ -622,7 +681,14 @@ export const IStokView: React.FC = () => {
                     console.log("Call received:", mediaConn.peer);
                     setIncomingCallObject(mediaConn);
                     playSound('CALL_RING');
-                    notifySystem("INCOMING SECURE CALL", "Encrypted voice channel requesting connection...");
+                    
+                    const callerName = sessions.find(s => s.id === mediaConn.peer)?.name || 'UNKNOWN CALLER';
+                    sendSmartNotification(
+                        "INCOMING SECURE CALL",
+                        `Encrypted voice call from ${callerName}`,
+                        mediaConn.peer,
+                        targetPeerId
+                    );
                 });
                 
                 peer.on('error', (err: any) => {
@@ -777,7 +843,9 @@ export const IStokView: React.FC = () => {
                         identity: req.identity, 
                         conn: incomingConn 
                     });
+                    
                     playSound('MSG_IN');
+                    sendSmartNotification("CONNECTION REQUEST", `${req.identity} wants to connect via IStok.`, incomingConn.peer, targetPeerId);
                 }
             }
         } else if (data.type === 'RESP') {
@@ -808,10 +876,19 @@ export const IStokView: React.FC = () => {
             const json = await decryptData(data.payload, pinRef.current);
             if (json) {
                 const msg = JSON.parse(json);
+                const peerId = connRef.current?.peer || 'UNKNOWN';
+                const senderName = sessions.find(s => s.id === peerId)?.name || 'ANOMALY';
+                
                 setMessages(prev => [...prev, { ...msg, sender: 'THEM', status: 'READ' }]);
                 playSound('MSG_IN');
-                if (!document.hasFocus()) {
-                    setLatestNotification({ sender: 'ANOMALY', text: msg.type === 'TEXT' ? msg.content : `SENT ${msg.type}` });
+
+                // === SMART NOTIFICATION LOGIC ===
+                const preview = msg.type === 'TEXT' ? msg.content : `Sent a ${msg.type}`;
+                sendSmartNotification(senderName, preview, peerId, targetPeerId);
+
+                // In-App Toast (Only if not in active chat view)
+                if (document.visibilityState === 'visible' && targetPeerId !== peerId) {
+                    setLatestNotification({ sender: senderName, text: preview });
                 }
             }
         } else if (data.type === 'SIGNAL') {
