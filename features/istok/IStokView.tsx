@@ -50,6 +50,7 @@ interface Message {
 }
 
 type AppMode = 'SELECT' | 'HOST' | 'JOIN' | 'CHAT' | 'DIALING' | 'INCOMING_CALL';
+type RoomType = 'DIRECT' | 'GROUP';
 type ConnectionStage = 'IDLE' | 'FETCHING_ICE' | 'LOCATING_PEER' | 'HANDSHAKE_INIT' | 'VERIFYING_KEYS' | 'ESTABLISHING_TUNNEL' | 'AWAITING_APPROVAL' | 'SECURE' | 'RECONNECTING';
 
 // --- UTILS ---
@@ -251,6 +252,7 @@ const sendSystemNotification = (title: string, body: string, tag: string, data: 
 
 export const IStokView: React.FC = () => {
     const [mode, setMode] = useState<AppMode>('SELECT');
+    const [roomType, setRoomType] = useState<RoomType>('DIRECT');
     const [stage, setStage] = useState<ConnectionStage>('IDLE');
     
     const [myProfile, setMyProfile] = useLocalStorage<IStokProfile>('istok_profile_v1', {
@@ -386,7 +388,7 @@ export const IStokView: React.FC = () => {
             myProfile.id, 
             myProfile.username, 
             handleParticipantsUpdate, 
-            handleIncomingMessage,
+            handleIncomingMessage, 
             handleSasRequest
         );
 
@@ -463,12 +465,22 @@ export const IStokView: React.FC = () => {
 
     // --- INITIALIZE PEERJS ---
     useEffect(() => {
+        // Flag to track if the effect is still active (mounted)
+        let aborted = false;
+        let retryTimeout: any;
+
         isDestroyedRef.current = false; // Reset destruction flag
 
         const initPeer = async () => {
+            // Debounce initialization to prevent rapid firing (e.g. strict mode double render)
+            await new Promise(r => setTimeout(r, 200));
+            if (aborted) return;
+
             const Peer = (await import('peerjs')).default;
             const iceServers = await getIceServers();
             
+            if (aborted) return;
+
             // Use debug 2 for errors/warnings
             const peer = new Peer(myProfile.id, {
                 config: { iceServers },
@@ -477,10 +489,12 @@ export const IStokView: React.FC = () => {
             });
 
             peer.on('open', (id) => {
+                if (aborted) { peer.destroy(); return; }
                 console.log('[ISTOK_NET] Peer Online:', id);
             });
 
             peer.on('connection', (conn) => {
+                if (aborted) { conn.close(); return; }
                 // Delegate to Room Manager
                 if (roomRef.current) {
                     roomRef.current.handleIncomingConnection(conn);
@@ -489,6 +503,7 @@ export const IStokView: React.FC = () => {
 
             // Handle Incoming Call (Direct Media)
             peer.on('call', (call) => {
+                if (aborted) { call.close(); return; }
                 console.log("[ISTOK_NET] Incoming Call...", call.peer);
                 // Simple auto-reject if busy
                 if (incomingMediaCallRef.current || activeTeleponan) {
@@ -503,30 +518,40 @@ export const IStokView: React.FC = () => {
             peer.on('error', (err) => {
                 console.error("[ISTOK_NET] Peer Error:", err);
                 if (err.type === 'peer-unavailable') {
-                    setErrorMsg("Target tidak ditemukan atau offline. Coba lagi.");
-                    setStage('IDLE');
+                    // Do not nuke stage immediately to avoid UI flicker, just notify
+                    console.warn("Target not found/offline.");
                 } else if (err.type === 'network') {
                     setIsRelayActive(true); 
-                    setErrorMsg("Koneksi jaringan terputus.");
+                    console.warn("Network issue detected.");
                 } else if (err.type === 'server-error') {
-                     setErrorMsg("PeerServer bermasalah. Mencoba ulang...");
+                     // Server issue, maybe retry?
                 }
             });
 
             peer.on('disconnected', () => {
                  console.log("[ISTOK_NET] Disconnected from signalling server.");
                  // Auto-reconnect to signalling only if NOT intentionally destroyed
-                 if (!isDestroyedRef.current) {
-                     setTimeout(() => {
+                 if (!isDestroyedRef.current && !aborted) {
+                     retryTimeout = setTimeout(() => {
+                         // CRITICAL: Double check destroyed flag before reconnecting
                          if (!isDestroyedRef.current && peer && !peer.destroyed) {
                              console.log("[ISTOK_NET] Attempting Reconnect...");
-                             peer.reconnect();
+                             try {
+                                peer.reconnect();
+                             } catch(e) {
+                                console.warn("Reconnect failed, peer might be dead", e);
+                             }
                          }
                      }, 3000);
                  }
             });
 
-            peerRef.current = peer;
+            if (!aborted) {
+                peerRef.current = peer;
+            } else {
+                // If aborted (unmounted) while initializing, destroy immediately
+                peer.destroy();
+            }
         };
 
         if (mode !== 'SELECT') {
@@ -534,7 +559,9 @@ export const IStokView: React.FC = () => {
         }
 
         return () => {
+            aborted = true; // Signal async init to stop
             isDestroyedRef.current = true; // Mark as intentionally destroyed
+            if (retryTimeout) clearTimeout(retryTimeout);
             if (peerRef.current) {
                 peerRef.current.destroy();
                 peerRef.current = null;
@@ -563,7 +590,8 @@ export const IStokView: React.FC = () => {
              return;
         }
         
-        if (peerRef.current.disconnected) {
+        // Safe check for disconnected state
+        if (peerRef.current.disconnected && !peerRef.current.destroyed) {
              peerRef.current.reconnect();
         }
 
@@ -588,7 +616,8 @@ export const IStokView: React.FC = () => {
         }
     };
 
-    const hostSession = () => {
+    const hostSession = (type: RoomType) => {
+        setRoomType(type);
         if (roomRef.current) {
             setTargetPeerId(''); 
             roomRef.current.createRoom();
@@ -788,12 +817,13 @@ export const IStokView: React.FC = () => {
 
                  <div className="grid grid-cols-1 gap-6 w-full max-w-sm z-10 animate-slide-up">
                     <button 
-                        onClick={() => { setAccessPin(Math.floor(100000 + Math.random()*900000).toString()); hostSession(); }} 
-                        className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-4 hover:bg-white/10 transition-all group"
+                        onClick={() => { setAccessPin(Math.floor(100000 + Math.random()*900000).toString()); hostSession('DIRECT'); }} 
+                        className="p-6 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/20 rounded-2xl flex items-center gap-4 transition-all group shadow-lg shadow-emerald-500/10"
                     >
-                        <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-500 group-hover:scale-110 transition-transform"><Server size={24} /></div>
-                        <div className="text-left"><h3 className="font-bold text-white">HOST SESSION</h3><p className="text-[10px] text-neutral-500">Generate Secure Room</p></div>
+                        <div className="p-3 bg-black/20 rounded-xl text-white group-hover:scale-110 transition-transform"><Server size={24} /></div>
+                        <div className="text-left"><h3 className="font-bold text-white text-lg">START DIRECT CHAT</h3><p className="text-[10px] text-emerald-100/70">1-on-1 Encrypted Channel</p></div>
                     </button>
+                    
                     <button 
                         onClick={() => setMode('JOIN')} 
                         className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-4 hover:bg-white/10 transition-all group"
@@ -801,6 +831,7 @@ export const IStokView: React.FC = () => {
                         <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500 group-hover:scale-110 transition-transform"><ScanLine size={24} /></div>
                         <div className="text-left"><h3 className="font-bold text-white">JOIN SESSION</h3><p className="text-[10px] text-neutral-500">Scan QR / Enter ID</p></div>
                     </button>
+
                     <button 
                         onClick={() => setShowContactSidebar(true)} 
                         className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-4 hover:bg-white/10 transition-all group"
@@ -808,6 +839,15 @@ export const IStokView: React.FC = () => {
                         <div className="p-3 bg-purple-500/10 rounded-xl text-purple-500 group-hover:scale-110 transition-transform"><Users size={24} /></div>
                         <div className="text-left"><h3 className="font-bold text-white">CONTACTS</h3><p className="text-[10px] text-neutral-500">Saved Friends</p></div>
                     </button>
+
+                    <div className="flex justify-center mt-2">
+                        <button 
+                            onClick={() => { setAccessPin(Math.floor(100000 + Math.random()*900000).toString()); hostSession('GROUP'); }} 
+                            className="text-[10px] font-bold text-neutral-500 hover:text-white uppercase tracking-widest flex items-center gap-2 px-4 py-2 hover:bg-white/5 rounded-full transition-all"
+                        >
+                            <Users size={12} /> CREATE GROUP ROOM (MAX 10)
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -840,7 +880,7 @@ export const IStokView: React.FC = () => {
                              <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full animate-pulse"></div>
                              <Server className="text-emerald-500 mx-auto relative z-10" size={48} />
                          </div>
-                         <h2 className="text-xl font-black text-white uppercase tracking-wider">SECURE_BROADCAST</h2>
+                         <h2 className="text-xl font-black text-white uppercase tracking-wider">{roomType === 'DIRECT' ? 'SECURE_DIRECT_LINK' : 'GROUP_BROADCAST'}</h2>
                          <div className="p-4 bg-black rounded-xl border border-white/5 space-y-4 relative z-10">
                             <div>
                                 <p className="text-[9px] text-neutral-500 mb-1 font-mono">YOUR ID</p>
@@ -877,6 +917,9 @@ export const IStokView: React.FC = () => {
     }
 
     // 6. CHAT MODE (Main)
+    const isHost = mode === 'HOST'; // Or verify based on role logic
+    const showWaiting = !isPeerOnline && stage !== 'IDLE' && !isHost;
+
     return (
         <div className="h-[100dvh] w-full bg-[#050505] flex flex-col font-sans relative overflow-hidden">
              
@@ -959,7 +1002,7 @@ export const IStokView: React.FC = () => {
              </div>
 
              {/* Status Overlay if disconnected */}
-             {!isPeerOnline && stage !== 'IDLE' && (
+             {showWaiting && (
                  <div className="absolute bottom-20 left-0 right-0 flex justify-center pointer-events-none">
                      <div className="bg-red-500/90 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2 animate-pulse">
                          <WifiOff size={12} /> WAITING_FOR_HOST

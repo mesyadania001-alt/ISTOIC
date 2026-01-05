@@ -21,7 +21,7 @@ interface ErrorBoundaryState {
  * "Fokus pada apa yang ada di depan mata Anda sekarang." — Marcus Aurelius.
  * Menangani kegagalan sistem dengan ketenangan stoik.
  */
-export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   
   constructor(props: ErrorBoundaryProps) {
     super(props);

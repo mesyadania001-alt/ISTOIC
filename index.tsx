@@ -1,3 +1,4 @@
+
 // IMPORT WAJIB: Penyeimbang WebRTC untuk semua browser (Safari/Android lama)
 import 'webrtc-adapter'; 
 
@@ -16,8 +17,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 
 // Register Service Worker for PWA Capabilities (Notifications & Offline)
-// In DEV mode, this might fail unless served via `npm run preview` or similar.
-if ('serviceWorker' in navigator && (import.meta as any).env.PROD) {
+// REMOVED PROD CHECK: Allow SW in dev for testing connectivity features.
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
       .then(registration => {
