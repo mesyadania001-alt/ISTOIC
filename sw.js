@@ -10,81 +10,82 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(clients.claim());
 });
 
-// --- TITANIUM NOTIFICATION HANDLER ---
+// Handle incoming messages from the main app (IStokView) to trigger System Notifications
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, body, tag, data } = event.data.payload;
     
-    // VIBRATION PATTERNS
-    // Call: Long, insistent vibration
-    // Message: Short, double tap
+    // Determine vibration pattern based on tag
     let vibrationPattern = [100, 50, 100];
-    let requireInteraction = false;
     let actions = [];
+    let requireInteraction = false;
 
     if (tag === 'istok_call') {
-        vibrationPattern = [1000, 500, 1000, 500, 1000]; 
-        requireInteraction = true;
+        vibrationPattern = [500, 1000, 500, 1000, 500]; // Longer, aggressive vibration for calls
         actions = [
-            { action: 'answer', title: '📞 ANSWER' },
-            { action: 'decline', title: '❌ DECLINE' }
+            { action: 'answer', title: '📞 Jawab' },
+            { action: 'decline', title: '❌ Tolak' }
         ];
+        requireInteraction = true;
     } else if (tag === 'istok_req') {
-        vibrationPattern = [200, 100, 200, 100, 200];
-        requireInteraction = true;
+        vibrationPattern = [200, 100, 200, 100];
         actions = [
-            { action: 'open', title: 'VIEW REQUEST' }
+            { action: 'open', title: 'Lihat' }
         ];
+        requireInteraction = true;
     } else {
         actions = [
-            { action: 'open', title: 'READ' },
-            { action: 'reply', title: 'REPLY' }
+            { action: 'open', title: 'Buka' }
         ];
     }
 
     self.registration.showNotification(title, {
       body: body,
-      icon: 'https://grainy-gradients.vercel.app/noise.svg', // Branding Icon
+      icon: 'https://grainy-gradients.vercel.app/noise.svg', // Fallback icon
       badge: 'https://grainy-gradients.vercel.app/noise.svg',
       vibrate: vibrationPattern,
-      tag: tag, // Ensures we don't spam stack, just update
-      renotify: true, // Always buzz again for new events with same tag
-      data: data,
+      tag: tag, // Tag ensures notifications of same type stack or replace
+      renotify: true, // Alert user every time even if tag exists
+      data: data, // Stores metadata like peerId
       actions: actions,
-      requireInteraction: requireInteraction,
+      requireInteraction: requireInteraction, // Keep visible until interacted
       silent: false
     });
   }
 });
 
+// Handle Notification Click (Smart Focusing & Actions)
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const urlToOpen = new URL(self.location.origin).href;
   const targetPeerId = event.notification.data ? event.notification.data.peerId : null;
-
-  // Handle Actions
-  if (event.action === 'decline') {
-      // Logic to send decline signal could go here via client messaging
-      return;
-  }
+  const action = event.action || 'open'; // 'answer', 'decline', 'open'
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // 1. Focus existing window if available
+      // 1. Try to find an existing window to focus
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
         if (client.url.startsWith(urlToOpen) && 'focus' in client) {
-          if (targetPeerId) {
-             // Tell the frontend to navigate/open chat
-             client.postMessage({ type: 'NAVIGATE_CHAT', peerId: targetPeerId, action: event.action });
-          }
-          return client.focus();
+          return client.focus().then((focusedClient) => {
+             // Send message to the focused client to handle the UI logic
+             if (focusedClient) {
+                 focusedClient.postMessage({ 
+                     type: 'NAVIGATE_CHAT', 
+                     peerId: targetPeerId, 
+                     action: action 
+                 });
+             }
+          });
         }
       }
-      // 2. Otherwise open new window
+      
+      // 2. If no window open, open a new one
       if (clients.openWindow) {
-        return clients.openWindow(urlToOpen + (targetPeerId ? `/?connect=${targetPeerId}` : ''));
+        // Append action to URL hash so app can handle it on boot
+        const bootUrl = urlToOpen + (targetPeerId ? `?connect=${targetPeerId}&action=${action}` : '');
+        return clients.openWindow(bootUrl);
       }
     })
   );

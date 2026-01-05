@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
     encryptData, decryptData
 } from '../../utils/crypto'; 
 import { TeleponanView } from '../teleponan/TeleponanView';
 import { activatePrivacyShield } from '../../utils/privacyShield';
 import { 
-    Send, Zap, Server, ScanLine,
-    Check, CheckCheck,
-    Mic, Square,
-    Skull, Phone, QrCode, Shield, ArrowRight,
-    X, UploadCloud, Users, Radio as RadioIcon, ArrowLeft, WifiOff
+    Send, Zap, Radio, ScanLine, Server,
+    Clock, Check, CheckCheck,
+    Mic, MicOff, Square,
+    Menu, Skull, Activity,
+    PhoneCall, QrCode, User, Shield, AlertTriangle, History, ArrowRight,
+    X, RefreshCw, Lock, Flame, ShieldAlert, Image as ImageIcon, Loader2, ArrowLeft, Wifi, WifiOff, UploadCloud, Users, Radio as RadioIcon, Globe, Phone
 } from 'lucide-react';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { useIDB } from '../../hooks/useIDB'; 
@@ -26,7 +28,7 @@ import { MediaDrawer } from './components/MediaDrawer';
 
 // --- CONSTANTS ---
 const CHUNK_SIZE = 16384; 
-const HEARTBEAT_INTERVAL = 2000; 
+const HEARTBEAT_INTERVAL = 3000; 
 const HEARTBEAT_TIMEOUT = 15000; 
 
 // --- TYPES ---
@@ -45,10 +47,11 @@ interface Message {
     ttl?: number; 
 }
 
-type AppMode = 'SELECT' | 'HOST' | 'JOIN' | 'CHAT';
+type AppMode = 'SELECT' | 'HOST' | 'JOIN' | 'CHAT' | 'DIALING' | 'INCOMING_CALL';
 type ConnectionStage = 'IDLE' | 'FETCHING_ICE' | 'LOCATING_PEER' | 'HANDSHAKE_INIT' | 'VERIFYING_KEYS' | 'ESTABLISHING_TUNNEL' | 'AWAITING_APPROVAL' | 'SECURE' | 'RECONNECTING';
 
 // --- UTILS ---
+
 const generateAnomalyIdentity = () => `ANOMALY-${Math.floor(Math.random() * 9000) + 1000}`;
 const generateStableId = () => `ISTOK-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
@@ -58,7 +61,7 @@ const triggerHaptic = (ms: number | number[]) => {
     }
 };
 
-const playSound = (type: 'MSG_IN' | 'MSG_OUT' | 'CONNECT' | 'CALL_RING' | 'ALERT') => {
+const playSound = (type: 'MSG_IN' | 'MSG_OUT' | 'CONNECT' | 'CALL_RING' | 'ERROR' | 'BUZZ') => {
     const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
@@ -92,28 +95,21 @@ const playSound = (type: 'MSG_IN' | 'MSG_OUT' | 'CONNECT' | 'CALL_RING' | 'ALERT
     } else if (type === 'CALL_RING') {
         osc.type = 'square';
         osc.frequency.setValueAtTime(880, now);
-        osc.frequency.exponentialRampToValueAtTime(440, now + 0.4);
+        osc.frequency.exponentialRampToValueAtTime(440, now + 0.3);
         gain.gain.setValueAtTime(0.1, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.4);
+        gain.gain.linearRampToValueAtTime(0, now + 0.5);
         osc.start(now);
-        osc.stop(now + 0.4);
-    } else if (type === 'ALERT') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(200, now);
-        osc.frequency.linearRampToValueAtTime(800, now + 0.1);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-        osc.start(now);
-        osc.stop(now + 0.3);
+        osc.stop(now + 0.5);
     }
 };
 
-// --- TITANIUM ICE CONFIGURATION ---
+// --- AGGRESSIVE ICE CONFIGURATION ---
 const getIceServers = async (): Promise<any[]> => {
     const meteredKey = process.env.VITE_METERED_API_KEY;
     const meteredDomain = process.env.VITE_METERED_DOMAIN || 'istok.metered.live';
 
     let iceServers = [
+        // GLOBAL PUBLIC STUN LIST (Redundancy Strategy)
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
@@ -125,27 +121,42 @@ const getIceServers = async (): Promise<any[]> => {
             console.log("[ISTOK_NET] Fetching Titanium Relay Credentials...");
             const response = await fetch(`https://${meteredDomain}/api/v1/turn/credentials?apiKey=${meteredKey}`);
             const turnServers = await response.json();
-            // Relay servers MUST be first
             iceServers = [...turnServers, ...iceServers];
         } catch (e) {
             console.warn("[ISTOK_NET] TURN Fetch Failed. Falling back to STUN Swarm.", e);
         }
     }
+
     return iceServers;
 };
 
-// ... (Sub Components: MessageBubble, IStokInput - Kept minimal for brevity) ...
+// ... Sub Components ...
 const MessageBubble = React.memo(({ msg, setViewImage }: any) => (
     <div className={`flex ${msg.sender === 'ME' ? 'justify-end' : 'justify-start'} mb-4 animate-slide-up`}>
         <div className={`max-w-[85%] flex flex-col ${msg.sender === 'ME' ? 'items-end' : 'items-start'}`}>
             <div className={`p-2 rounded-2xl text-sm border shadow-sm ${msg.sender === 'ME' ? 'bg-blue-600/20 border-blue-500/30 text-blue-100' : 'bg-[#1a1a1a] text-neutral-200 border-white/10'} ${msg.type === 'TEXT' ? 'px-4 py-3' : 'p-1'}`}>
-                {msg.type === 'IMAGE' ? <ImageMessage content={msg.content} size={msg.size} mimeType={msg.mimeType} onClick={() => setViewImage(msg.content)} /> : 
-                 msg.type === 'AUDIO' ? <AudioMessagePlayer src={msg.content} duration={msg.duration} mimeType={msg.mimeType} isMasked={msg.isMasked}/> :
+                {msg.type === 'IMAGE' ? 
+                    <ImageMessage 
+                        content={msg.content} 
+                        size={msg.size} 
+                        mimeType={msg.mimeType} 
+                        onClick={() => setViewImage(msg.content)} 
+                    /> : 
+                 msg.type === 'AUDIO' ? 
+                    <AudioMessagePlayer 
+                        src={msg.content} 
+                        duration={msg.duration} 
+                        mimeType={msg.mimeType}
+                        isMasked={msg.isMasked}
+                    /> :
                  <span className="whitespace-pre-wrap leading-relaxed">{msg.content}</span>}
             </div>
-            <div className="flex items-center gap-1 mt-1 opacity-50 text-[8px] font-mono">
-                 <span>{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                 {msg.sender === 'ME' && (msg.status === 'READ' ? <CheckCheck size={10} className="text-blue-400" /> : msg.status === 'DELIVERED' ? <CheckCheck size={10} /> : <Check size={10} />)}
+            <div className="flex items-center gap-1 mt-1 opacity-50">
+                 <span className="text-[8px] font-mono">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                 {msg.sender === 'ME' && (
+                     msg.status === 'READ' ? <CheckCheck size={10} className="text-blue-400" /> : 
+                     msg.status === 'DELIVERED' ? <CheckCheck size={10} /> : <Check size={10} />
+                 )}
             </div>
         </div>
     </div>
@@ -174,8 +185,20 @@ const IStokInput = React.memo(({ onSend, onTyping, disabled, isRecording, record
                     <button onClick={()=>{onSend(text);setText(''); inputRef.current?.focus();}} className="p-3 bg-emerald-600 hover:bg-emerald-500 rounded-full text-white transition-all shadow-lg active:scale-95"><Send size={20}/></button>
                 ) : (
                     <>
-                        <button onClick={onTogglePTT} className="p-3 rounded-full bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-black transition-all"><RadioIcon size={20} /></button>
-                        <button onMouseDown={onStartRecord} onMouseUp={onStopRecord} onTouchStart={onStartRecord} onTouchEnd={onStopRecord} className={`p-3 rounded-full transition-all ${isRecording ? 'bg-red-500 text-white shadow-[0_0_15px_red] animate-pulse scale-110' : 'bg-white/5 text-neutral-400 hover:text-white'}`}>
+                        <button 
+                            onClick={onTogglePTT}
+                            className="p-3 rounded-full bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-black transition-all"
+                            title="Walkie Talkie"
+                        >
+                            <RadioIcon size={20} />
+                        </button>
+                        <button 
+                            onMouseDown={onStartRecord} 
+                            onMouseUp={onStopRecord} 
+                            onTouchStart={onStartRecord} 
+                            onTouchEnd={onStopRecord} 
+                            className={`p-3 rounded-full transition-all ${isRecording ? 'bg-red-500 text-white shadow-[0_0_15px_red] animate-pulse scale-110' : 'bg-white/5 text-neutral-400 hover:text-white'}`}
+                        >
                             {isRecording ? <Square size={20} fill="currentColor" /> : <Mic size={20} />}
                         </button>
                     </>
@@ -185,7 +208,7 @@ const IStokInput = React.memo(({ onSend, onTyping, disabled, isRecording, record
     );
 });
 
-// --- HELPER: SYSTEM NOTIFICATION ---
+// --- HELPER: SYSTEM NOTIFICATION TRIGGER ---
 const sendSystemNotification = (title: string, body: string, tag: string, data: any = {}) => {
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
@@ -216,6 +239,7 @@ export const IStokView: React.FC = () => {
     const pinRef = useRef(accessPin); 
     const isMounted = useRef(true);
     const msgEndRef = useRef<HTMLDivElement>(null);
+    const chunkBuffer = useRef<Record<string, { chunks: string[], count: number, total: number }>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
     const lastPongRef = useRef<number>(Date.now());
     const heartbeatRef = useRef<any>(null);
@@ -225,7 +249,7 @@ export const IStokView: React.FC = () => {
     const audioChunksRef = useRef<Blob[]>([]);
     const recordingIntervalRef = useRef<any>(null);
     
-    // UI States
+    // States
     const [messages, setMessages] = useState<Message[]>([]);
     const [incomingConnectionRequest, setIncomingConnectionRequest] = useState<{ peerId: string, identity: string, conn: any } | null>(null);
     const [isPeerOnline, setIsPeerOnline] = useState(false);
@@ -240,40 +264,64 @@ export const IStokView: React.FC = () => {
     const [viewImage, setViewImage] = useState<string | null>(null);
     const [latestAudioMessage, setLatestAudioMessage] = useState<Message | null>(null);
     
+    // NOTIFICATION STATES
     const [latestMessageNotif, setLatestMessageNotif] = useState<{sender: string, text: string} | null>(null);
+
+    // CALLING STATE
     const [incomingMediaCall, setIncomingMediaCall] = useState<any>(null);
     const [activeTeleponan, setActiveTeleponan] = useState(false);
     const [outgoingCallTarget, setOutgoingCallTarget] = useState<string | null>(null);
 
-    // --- PERSISTENCE ---
+    // --- REFS FOR EVENT LISTENERS ---
+    // Needed to access latest state inside SW event listener
+    const incomingMediaCallRef = useRef<any>(null);
+    const incomingReqRef = useRef<any>(null);
+    
+    useEffect(() => { incomingMediaCallRef.current = incomingMediaCall; }, [incomingMediaCall]);
+    useEffect(() => { incomingReqRef.current = incomingConnectionRequest; }, [incomingConnectionRequest]);
+
+    // --- PERSISTENCE: LOAD CHAT HISTORY ---
     const [storedMessages, setStoredMessages] = useIDB<Message[]>(`istok_chat_${targetPeerId || 'draft'}`, []);
 
-    // --- CRITICAL FIX: SYNC PIN REF ---
-    // Ensure the ref always has the latest state value so the callback can access it
-    useEffect(() => {
-        pinRef.current = accessPin;
-    }, [accessPin]);
+    // Sync Access Pin Ref
+    useEffect(() => { pinRef.current = accessPin; }, [accessPin]);
 
-    // SW Message Listener (Handle Actions from Notification Click)
+    // REQUEST NOTIFICATION PERMISSION ON MOUNT
     useEffect(() => {
-        const handleSWMessage = (event: MessageEvent) => {
-            if (event.data?.type === 'NAVIGATE_CHAT') {
-                const { peerId, action } = event.data;
-                console.log("[ISTOK] SW Command:", action, peerId);
+        if ('Notification' in window && Notification.permission !== 'granted') {
+            Notification.requestPermission();
+        }
+    }, []);
+
+    // --- SERVICE WORKER BRIDGE ---
+    useEffect(() => {
+        const handleServiceWorkerMessage = (event: MessageEvent) => {
+            const { type, action, peerId } = event.data;
+            if (type === 'NAVIGATE_CHAT') {
+                console.log("[ISTOK] Action from Notification:", action);
                 
-                // Handle notification click to open relevant sections
-                if (peerId) {
-                    if (action === 'answer') {
-                        // TODO: Implement direct answer logic if needed
-                    } else if (action === 'open') {
-                        // If we are in request state, it will be handled by UI
-                        // If chat state, we are already there
-                    }
+                // Handle Call Actions
+                if (incomingMediaCallRef.current && incomingMediaCallRef.current.peer === peerId) {
+                    if (action === 'answer') handleAnswerCall();
+                    else if (action === 'decline') handleDeclineCall();
+                }
+
+                // Handle Connection Request Focus
+                if (incomingReqRef.current && incomingReqRef.current.peerId === peerId) {
+                     // Just focusing handles the view as the overlay is persistent
                 }
             }
         };
-        navigator.serviceWorker?.addEventListener('message', handleSWMessage);
-        return () => navigator.serviceWorker?.removeEventListener('message', handleSWMessage);
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+        }
+
+        return () => {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+            }
+        };
     }, []);
 
     useEffect(() => {
@@ -288,7 +336,24 @@ export const IStokView: React.FC = () => {
         }
     }, [messages, targetPeerId]);
 
-    // --- ZOMBIE KILLER ---
+    // --- IDENTITY MANAGEMENT ---
+    const regenerateProfile = () => {
+        const now = Date.now();
+        const newHistory = [...(myProfile.idChangeHistory || []), now];
+        const newProfile = {
+            id: generateStableId(),
+            username: generateAnomalyIdentity(),
+            created: myProfile.created,
+            idChangeHistory: newHistory
+        };
+        setMyProfile(newProfile);
+        if (peerRef.current) {
+            peerRef.current.destroy();
+            setTimeout(() => window.location.reload(), 500);
+        }
+    };
+
+    // --- ZOMBIE KILLER & HEARTBEAT ---
     const nukeConnection = () => {
         if (heartbeatRef.current) clearInterval(heartbeatRef.current);
         if (connRef.current) {
@@ -305,8 +370,10 @@ export const IStokView: React.FC = () => {
         
         heartbeatRef.current = setInterval(() => {
             if (!connRef.current || !isPeerOnline) return;
+            
+            // Check lag
             if (Date.now() - lastPongRef.current > HEARTBEAT_TIMEOUT) {
-                console.warn("[ISTOK_NET] Peer Timed Out");
+                console.warn("[ISTOK_NET] Peer Timed Out - Triggering Soft Reconnect");
                 connRef.current.send({ type: 'PING' }); 
             } else {
                 connRef.current.send({ type: 'PING' });
@@ -314,12 +381,13 @@ export const IStokView: React.FC = () => {
         }, HEARTBEAT_INTERVAL);
     };
 
-    // --- CALLING LOGIC ---
+    // --- CALL HANDLERS ---
     const initiateCall = () => {
         if (connRef.current) {
-            // 1. Dual-Layer Signaling: Send data packet to wake up peer
+            // 1. Send Pre-Call Signal via Data Channel (Faster UI wake-up)
             connRef.current.send({ type: 'CALL_SIGNAL' });
-            // 2. Open UI
+            
+            // 2. Open Teleponan Interface
             setOutgoingCallTarget(targetPeerId);
             setActiveTeleponan(true);
         }
@@ -337,16 +405,25 @@ export const IStokView: React.FC = () => {
         }
     };
 
-    // --- HANDSHAKE ---
+    // --- HANDSHAKE PROTOCOL ---
     const joinSession = (id?: string, pin?: string) => {
         const target = id || targetPeerId;
         const key = pin || accessPin;
-        if (!target || !key) return;
+        if (!target || !key) {
+            setErrorMsg("Target ID or PIN missing.");
+            return;
+        }
 
-        if (pin) pinRef.current = pin;
-        setAccessPin(key); // This will trigger the useEffect to update ref
+        // Set local state before connection attempt
+        setAccessPin(key);
+        setTargetPeerId(target);
+        pinRef.current = key;
 
-        if (connRef.current && connRef.current.peer === target && isPeerOnline) return;
+        if (connRef.current && connRef.current.peer === target && isPeerOnline) {
+             console.log("Already connected to target.");
+             setMode('CHAT');
+             return;
+        }
 
         nukeConnection();
 
@@ -364,9 +441,24 @@ export const IStokView: React.FC = () => {
             });
             connRef.current = conn;
 
+            // Connection Timeout Backup
+            const connectionTimeout = setTimeout(() => {
+                if (stage !== 'SECURE' && stage !== 'AWAITING_APPROVAL') {
+                    console.warn("Connection attempt timed out");
+                    setErrorMsg("PEER_UNREACHABLE");
+                    setStage('IDLE');
+                    conn.close();
+                }
+            }, 10000);
+
             conn.on('open', () => {
+                clearTimeout(connectionTimeout);
+                console.log("[ISTOK_NET] Tunnel Open. Handshaking...");
                 setStage('HANDSHAKE_INIT');
+                
+                // Immediate Ping to punch NAT
                 conn.send({ type: 'PING' });
+                
                 setTimeout(async () => {
                     setStage('VERIFYING_KEYS');
                     const payload = JSON.stringify({ type: 'CONNECTION_REQUEST', identity: myProfile.username });
@@ -374,20 +466,51 @@ export const IStokView: React.FC = () => {
                     if (encrypted) {
                         conn.send({ type: 'REQ', payload: encrypted });
                         setStage('AWAITING_APPROVAL');
+                    } else {
+                        setErrorMsg("ENCRYPTION_FAILED");
                     }
-                }, 500);
+                }, 800);
             });
 
             conn.on('data', (data: any) => handleData(data));
-            conn.on('close', handleDisconnect);
-            conn.on('error', () => { setErrorMsg('CONNECTION_FAILED'); setStage('IDLE'); });
+            conn.on('close', () => {
+                clearTimeout(connectionTimeout);
+                handleDisconnect();
+            });
+            conn.on('error', (err: any) => {
+                clearTimeout(connectionTimeout);
+                console.error("Conn Error", err);
+                setErrorMsg('CONNECTION_FAILED');
+                setStage('IDLE');
+            });
             
         } catch(e) {
+            console.error("Join Exception", e);
             setErrorMsg('CONNECTION_ERROR');
         }
     };
 
     const handleData = async (data: any, incomingConn?: any) => {
+        // --- CHUNK HANDLER ---
+        if (data.type === 'CHUNK') {
+            const { transferId, idx, total, data: chunkData } = data;
+            if (!chunkBuffer.current[transferId]) {
+                chunkBuffer.current[transferId] = { chunks: new Array(total), count: 0, total };
+            }
+            const buffer = chunkBuffer.current[transferId];
+            if (!buffer.chunks[idx]) {
+                buffer.chunks[idx] = chunkData;
+                buffer.count++;
+            }
+            if (buffer.count === total) {
+                const fullPayload = buffer.chunks.join('');
+                delete chunkBuffer.current[transferId];
+                handleData({ type: 'MSG', payload: fullPayload });
+            }
+            return;
+        }
+
+        // --- HEARTBEAT ---
         if (data.type === 'PING') {
             (incomingConn || connRef.current)?.send({ type: 'PONG' });
             return;
@@ -397,28 +520,23 @@ export const IStokView: React.FC = () => {
             if (!isPeerOnline && mode === 'CHAT') setIsPeerOnline(true);
             return;
         }
-        
-        // --- CRITICAL: CALL SIGNALING HANDLER ---
+
+        // --- CALL SIGNALING ---
         if (data.type === 'CALL_SIGNAL') {
+            // Wake up UI even before media connection arrives
             playSound('CALL_RING');
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
-            
-            // Trigger Background Notification via SW
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            // Background Notification
             if (document.hidden) {
-                const peerName = sessions.find(s => s.id === (incomingConn || connRef.current)?.peer)?.name || "Unknown Caller";
-                sendSystemNotification(
-                    'INCOMING SECURE CALL', 
-                    `Encrypted Uplink Request from ${peerName}`, 
-                    'istok_call', 
-                    { peerId: (incomingConn || connRef.current)?.peer }
-                );
+                sendSystemNotification('INCOMING CALL', 'Encrypted Voice Uplink...', 'istok_call', { peerId: (incomingConn || connRef.current)?.peer });
             }
             return;
         }
 
-        // Use REF to get LATEST pin value
+        // Use current session key
         const currentKey = pinRef.current;
 
+        // --- HANDSHAKE: REQUEST ---
         if (data.type === 'REQ') {
             const json = await decryptData(data.payload, currentKey);
             if (json) {
@@ -430,19 +548,22 @@ export const IStokView: React.FC = () => {
                         identity: req.identity, 
                         conn: incomingConn 
                     });
-                    playSound('MSG_IN'); // Should be ALERT but MSG_IN is safer/known
+                    playSound('MSG_IN');
                     triggerHaptic([100, 50, 100]);
                     
+                    // Background Notification
                     if (document.hidden) {
-                        sendSystemNotification('CONNECTION REQUEST', `${req.identity} wants to connect.`, 'istok_req');
+                        sendSystemNotification('CONNECTION REQUEST', `${req.identity} wants to connect.`, 'istok_req', { peerId: incomingConn.peer });
                     }
                 }
             } else {
-                console.warn("[ISTOK_SEC] Decryption Failed. Key mismatch or corrupt data.", { storedPin: currentKey });
-                setErrorMsg("HANDSHAKE_DECRYPT_FAIL");
-                playSound('ALERT');
+                console.warn("[ISTOK_SEC] Decryption Failed for REQ. PIN Mismatch or Tampering.");
+                // Optionally send back a generic error frame if protocol allows, but silence is safer.
             }
-        } else if (data.type === 'RESP') {
+        } 
+        
+        // --- HANDSHAKE: RESPONSE ---
+        else if (data.type === 'RESP') {
             const json = await decryptData(data.payload, currentKey);
             if (json) {
                 const res = JSON.parse(json);
@@ -452,29 +573,45 @@ export const IStokView: React.FC = () => {
                     setIsPeerOnline(true);
                     startHeartbeat();
                     playSound('CONNECT');
+                    triggerHaptic(200);
                     
                     const now = Date.now();
                     setSessions(prev => {
                         const existing = prev.find(s => s.id === connRef.current.peer);
                         if (existing) return prev.map(s => s.id === connRef.current.peer ? { ...s, lastSeen: now, status: 'ONLINE', name: res.identity } : s);
-                        return [...prev, { id: connRef.current.peer, name: res.identity, lastSeen: now, status: 'ONLINE', pin: currentKey, createdAt: now }];
+                        return [...prev, {
+                            id: connRef.current.peer,
+                            name: res.identity,
+                            lastSeen: now,
+                            status: 'ONLINE',
+                            pin: currentKey,
+                            createdAt: now
+                        }];
                     });
                 }
             } else {
-                setErrorMsg("PIN_MISMATCH");
+                setErrorMsg("PIN MISMATCH: Unable to decrypt handshake.");
+                setStage('IDLE');
+                if (connRef.current) connRef.current.close();
             }
-        } else if (data.type === 'MSG') {
+        } 
+        
+        // --- ENCRYPTED MESSAGE ---
+        else if (data.type === 'MSG') {
              const json = await decryptData(data.payload, currentKey);
              if (json) {
                  const msg = JSON.parse(json);
                  const incomingMsg = { ...msg, sender: 'THEM', status: 'READ' };
                  setMessages(prev => [...prev, incomingMsg]);
                  
-                 if (incomingMsg.type === 'AUDIO') setLatestAudioMessage(incomingMsg);
+                 // Handle specific message types
+                 if (incomingMsg.type === 'AUDIO') {
+                     setLatestAudioMessage(incomingMsg);
+                 }
 
                  playSound('MSG_IN');
                  
-                 // NOTIFICATION LOGIC
+                 // NOTIFICATIONS
                  const peerName = sessions.find(s => s.id === (incomingConn || connRef.current)?.peer)?.name || "Unknown";
                  const preview = incomingMsg.type === 'TEXT' ? incomingMsg.content : `[${incomingMsg.type}]`;
                  
@@ -485,13 +622,17 @@ export const IStokView: React.FC = () => {
                  }
 
                  setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+             } else {
+                 console.warn("Message Decryption Failed.");
              }
         }
     };
 
     const handleIncomingConnection = (conn: any) => {
+        console.log("[ISTOK_NET] Incoming connection from", conn.peer);
         conn.on('data', (data: any) => handleData(data, conn));
         conn.on('close', handleDisconnect);
+        conn.on('error', (err: any) => console.warn("Incoming Conn Error", err));
     };
 
     const handleDisconnect = () => {
@@ -508,9 +649,9 @@ export const IStokView: React.FC = () => {
         const { conn, identity, peerId } = incomingConnectionRequest;
         connRef.current = conn;
         
-        // Ensure we are using the current PIN for encryption reply
-        const currentPin = pinRef.current;
-
+        // Use Host's PIN to encrypt response (Symmetry required)
+        const currentPin = pinRef.current; 
+        
         const payload = JSON.stringify({ type: 'CONNECTION_ACCEPT', identity: myProfile.username });
         const encrypted = await encryptData(payload, currentPin);
         
@@ -520,14 +661,24 @@ export const IStokView: React.FC = () => {
             setMode('CHAT');
             setIncomingConnectionRequest(null);
             setIsPeerOnline(true);
+            setTargetPeerId(peerId);
             startHeartbeat();
             
             const now = Date.now();
             setSessions(prev => {
                  const existing = prev.find(s => s.id === peerId);
                  if (existing) return prev.map(s => s.id === peerId ? { ...s, lastSeen: now, status: 'ONLINE', name: identity } : s);
-                 return [...prev, { id: peerId, name: identity, lastSeen: now, status: 'ONLINE', pin: currentPin, createdAt: now }];
+                 return [...prev, {
+                     id: peerId,
+                     name: identity,
+                     lastSeen: now,
+                     status: 'ONLINE',
+                     pin: currentPin,
+                     createdAt: now
+                 }];
             });
+        } else {
+            console.error("Failed to encrypt acceptance");
         }
     };
 
@@ -538,7 +689,15 @@ export const IStokView: React.FC = () => {
         }
 
         const msgId = crypto.randomUUID();
-        const payload = { id: msgId, sender: 'THEM', type, content, timestamp: Date.now(), ...extraData };
+        const payload = {
+            id: msgId,
+            sender: 'THEM',
+            type,
+            content,
+            timestamp: Date.now(),
+            ...extraData
+        };
+
         const myMsg = { ...payload, sender: 'ME', status: 'PENDING' };
         setMessages(prev => [...prev, myMsg as any]);
 
@@ -546,21 +705,87 @@ export const IStokView: React.FC = () => {
         
         if (encrypted) {
             if (encrypted.length > CHUNK_SIZE) {
-                 // Chunk logic (omitted for brevity, same as previous)
-                 connRef.current.send({ type: 'MSG', payload: encrypted }); // Simplified
+                 const transferId = crypto.randomUUID();
+                 const total = Math.ceil(encrypted.length / CHUNK_SIZE);
+                 
+                 for (let i = 0; i < total; i++) {
+                     const chunk = encrypted.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+                     connRef.current.send({
+                         type: 'CHUNK',
+                         transferId,
+                         idx: i,
+                         total,
+                         data: chunk
+                     });
+                     await new Promise(r => setTimeout(r, 5)); 
+                 }
             } else {
                  connRef.current.send({ type: 'MSG', payload: encrypted });
             }
+            
             setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'SENT' } : m));
             playSound('MSG_OUT');
             setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
         }
     };
 
-    // --- MEDIA UTILS (Simplified) ---
-    const startRecording = async () => { /* ... same as previous ... */ };
-    const stopRecording = () => { /* ... same as previous ... */ };
-    const handleFileSelect = (e: any) => { /* ... same as previous ... */ };
+    // --- RECORDING & FILES (Same as before) ---
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mimeType = getSupportedMimeType();
+            
+            const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunksRef.current.push(e.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64Audio = reader.result as string;
+                    const cleanBase64 = base64Audio.split(',')[1];
+                    sendMessage('AUDIO', cleanBase64, { duration: recordingTime, mimeType: mediaRecorder.mimeType });
+                };
+                reader.readAsDataURL(audioBlob);
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            mediaRecorder.start();
+            setIsRecording(true);
+            setRecordingTime(0);
+            recordingIntervalRef.current = setInterval(() => setRecordingTime(prev => prev + 1), 1000);
+            triggerHaptic(50);
+        } catch (e) {
+            console.error("Mic error", e);
+            alert("Microphone access denied.");
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+            clearInterval(recordingIntervalRef.current);
+            triggerHaptic(50);
+        }
+    };
+
+    const handleFileSelect = (e: any) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.type.startsWith('image/')) {
+            compressImage(file).then(compressed => {
+                sendMessage('IMAGE', compressed.base64, { size: compressed.size, mimeType: compressed.mimeType });
+            }).catch(err => {
+                alert("Image compression failed.");
+            });
+        }
+    };
 
     // --- SIDEBAR HANDLERS ---
     const handleSelectSession = (s: IStokSession) => {
@@ -570,13 +795,13 @@ export const IStokView: React.FC = () => {
         joinSession(s.id, s.pin);
     };
 
-    const regenerateProfile = () => {
-        const newProfile = { ...myProfile, id: generateStableId(), username: generateAnomalyIdentity() };
-        setMyProfile(newProfile);
-        if (peerRef.current) {
-            peerRef.current.destroy();
-            setTimeout(() => window.location.reload(), 500);
-        }
+    const handleRenameSession = (id: string, newName: string) => {
+        setSessions(prev => prev.map(s => s.id === id ? { ...s, customName: newName } : s));
+    };
+
+    const handleDeleteSession = (id: string) => {
+        setSessions(prev => prev.filter(s => s.id !== id));
+        if (targetPeerId === id) setMessages([]); 
     };
 
     // --- INITIALIZATION ---
@@ -595,28 +820,37 @@ export const IStokView: React.FC = () => {
                 const { Peer } = await import('peerjs');
                 const peer = new Peer(myProfile.id, { 
                     debug: 2, 
-                    config: { iceServers, sdpSemantics: 'unified-plan', iceCandidatePoolSize: 10 } 
+                    config: { 
+                        iceServers, 
+                        sdpSemantics: 'unified-plan',
+                        iceCandidatePoolSize: 10 
+                    } 
                 });
 
                 peer.on('open', (id) => {
+                    console.log(`[ISTOK_NET] Peer Online: ${id}`);
                     setStage('IDLE');
-                    // Check URL params for quick join
+                    
                     const params = new URLSearchParams(window.location.search);
-                    if (params.get('connect')) {
-                        setTargetPeerId(params.get('connect')!);
-                        setAccessPin(params.get('key')!);
-                        setTimeout(() => joinSession(params.get('connect'), params.get('key')), 500);
+                    const connectId = params.get('connect');
+                    const key = params.get('key');
+                    if (connectId && key) {
+                        setTargetPeerId(connectId);
+                        setAccessPin(key);
+                        setTimeout(() => joinSession(connectId, key), 500);
+                        window.history.replaceState({}, '', window.location.pathname);
                     }
                 });
 
                 peer.on('connection', handleIncomingConnection);
                 
-                // CALL LISTENER
+                // CRITICAL: Handle Incoming Call Event from PeerJS
                 peer.on('call', (call: any) => {
                     console.log("[ISTOK_NET] INCOMING CALL DETECTED");
                     setIncomingMediaCall(call);
                     playSound('CALL_RING');
                     
+                    // Trigger Service Worker Notification if Hidden
                     if (document.hidden) {
                         sendSystemNotification('INCOMING SECURE CALL', 'Encrypted Voice Uplink Request...', 'istok_call', { peerId: call.peer });
                     }
@@ -630,6 +864,7 @@ export const IStokView: React.FC = () => {
 
                 peerRef.current = peer;
             } catch (e) {
+                console.error("Init Fail", e);
                 setErrorMsg("INIT_FAIL");
             }
         };
@@ -643,9 +878,9 @@ export const IStokView: React.FC = () => {
         };
     }, []);
 
-    // --- GLOBAL RENDER ELEMENTS ---
-    
-    // RENDER: Active Call View
+    // --- RENDER MODES ---
+
+    // 1. Full Screen Overlay for Calls (Titanium Integration)
     if (activeTeleponan) {
         return (
             <TeleponanView 
@@ -656,8 +891,19 @@ export const IStokView: React.FC = () => {
             />
         );
     }
-    
-    // RENDER: Full Screen Image View
+
+    // 2. Incoming Call Notification Overlay (Global Priority)
+    if (incomingMediaCall) {
+        return (
+            <CallNotification 
+                identity={sessions.find(s => s.id === incomingMediaCall.peer)?.name || incomingMediaCall.peer}
+                onAnswer={handleAnswerCall}
+                onDecline={handleDeclineCall}
+            />
+        );
+    }
+
+    // 3. Image Viewer Overlay
     if (viewImage) {
         return (
             <div className="fixed inset-0 z-[10000] bg-black flex flex-col items-center justify-center p-4">
@@ -667,79 +913,66 @@ export const IStokView: React.FC = () => {
         );
     }
 
-    // --- GLOBAL NOTIFICATIONS (Always rendered) ---
-    // This fixes "Nothing happens" on Host side. Notification is now top-level.
-    const notifications = (
-        <>
-             {incomingMediaCall && (
-                <CallNotification 
-                    identity={sessions.find(s => s.id === incomingMediaCall.peer)?.name || incomingMediaCall.peer}
-                    onAnswer={handleAnswerCall}
-                    onDecline={handleDeclineCall}
-                />
-            )}
-
-            {incomingConnectionRequest && (
-                 <ConnectionNotification 
-                    identity={incomingConnectionRequest.identity}
-                    peerId={incomingConnectionRequest.peerId}
-                    onAccept={acceptConnection}
-                    onDecline={() => setIncomingConnectionRequest(null)}
-                 />
-             )}
-
-             {latestMessageNotif && (
-                 <MessageNotification 
-                     senderName={latestMessageNotif.sender}
-                     messagePreview={latestMessageNotif.text}
-                     onDismiss={() => setLatestMessageNotif(null)}
-                     onClick={() => setLatestMessageNotif(null)}
-                 />
-             )}
-             
-             {errorMsg && (
-                 <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[12000] bg-red-500/90 text-white px-6 py-3 rounded-full shadow-lg animate-slide-down flex items-center gap-2">
-                     <Shield size={16} /> 
-                     <span className="text-xs font-bold tracking-wider">{errorMsg}</span>
-                     <button onClick={() => setErrorMsg('')}><X size={14} /></button>
-                 </div>
-             )}
-        </>
-    );
-
-    // --- MODE: SELECT (Dashboard) ---
+    // 4. Initial Mode
     if (mode === 'SELECT') {
         return (
             <div className="h-[100dvh] w-full bg-[#050505] flex flex-col items-center justify-center px-6 space-y-12 relative overflow-hidden font-sans">
-                 {notifications}
-
                  <SidebarIStokContact 
                     isOpen={showContactSidebar}
                     onClose={() => setShowContactSidebar(false)}
                     sessions={sessions}
                     profile={myProfile}
                     onSelect={handleSelectSession}
-                    onRename={(id, n) => setSessions(p => p.map(s => s.id === id ? { ...s, customName: n } : s))}
-                    onDelete={(id) => setSessions(p => p.filter(s => s.id !== id))}
+                    onRename={handleRenameSession}
+                    onDelete={handleDeleteSession}
                     onRegenerateProfile={regenerateProfile}
                     currentPeerId={null}
                  />
 
+                 {/* TOAST: Incoming Message while in menu */}
+                 {latestMessageNotif && (
+                     <MessageNotification 
+                         senderName={latestMessageNotif.sender}
+                         messagePreview={latestMessageNotif.text}
+                         onDismiss={() => setLatestMessageNotif(null)}
+                         onClick={() => { setLatestMessageNotif(null); /* Could navigate to specific chat if needed */ }}
+                     />
+                 )}
+
+                 {/* Global Connection Request Overlay (High Priority) */}
+                 {incomingConnectionRequest && (
+                     <ConnectionNotification 
+                        identity={incomingConnectionRequest.identity}
+                        peerId={incomingConnectionRequest.peerId}
+                        onAccept={acceptConnection}
+                        onDecline={() => setIncomingConnectionRequest(null)}
+                     />
+                 )}
+
                  <div className="text-center space-y-4 z-10 animate-fade-in">
                      <h1 className="text-5xl font-black text-white italic tracking-tighter">IStoic <span className="text-emerald-500">P2P</span></h1>
-                     <p className="text-xs text-neutral-500 font-mono">SECURE RELAY PROTOCOL v27</p>
+                     <p className="text-xs text-neutral-500 font-mono">SECURE RELAY PROTOCOL v25</p>
                  </div>
 
                  <div className="grid grid-cols-1 gap-6 w-full max-w-sm z-10 animate-slide-up">
-                    <button onClick={() => { setAccessPin(Math.floor(100000 + Math.random()*900000).toString()); setMode('HOST'); }} className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-4 hover:bg-white/10 transition-all group">
+                    <button 
+                        onClick={() => { setAccessPin(Math.floor(100000 + Math.random()*900000).toString()); setMode('HOST'); }} 
+                        className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-4 hover:bg-white/10 transition-all group"
+                    >
                         <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-500 group-hover:scale-110 transition-transform"><Server size={24} /></div>
                         <div className="text-left"><h3 className="font-bold text-white">HOST SESSION</h3><p className="text-[10px] text-neutral-500">Generate Secure Room</p></div>
                     </button>
-                    <button onClick={() => setMode('JOIN')} className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-4 hover:bg-white/10 transition-all group">
+                    <button 
+                        onClick={() => setMode('JOIN')} 
+                        className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-4 hover:bg-white/10 transition-all group"
+                    >
                         <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500 group-hover:scale-110 transition-transform"><ScanLine size={24} /></div>
                         <div className="text-left"><h3 className="font-bold text-white">JOIN SESSION</h3><p className="text-[10px] text-neutral-500">Scan QR / Enter ID</p></div>
                     </button>
-                    <button onClick={() => setShowContactSidebar(true)} className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-4 hover:bg-white/10 transition-all group">
+                    <button 
+                        onClick={() => setShowContactSidebar(true)} 
+                        className="p-6 bg-white/5 border border-white/10 rounded-2xl flex items-center gap-4 hover:bg-white/10 transition-all group"
+                    >
                         <div className="p-3 bg-purple-500/10 rounded-xl text-purple-500 group-hover:scale-110 transition-transform"><Users size={24} /></div>
                         <div className="text-left"><h3 className="font-bold text-white">CONTACTS</h3><p className="text-[10px] text-neutral-500">Recent Connections</p></div>
                     </button>
@@ -748,11 +981,12 @@ export const IStokView: React.FC = () => {
         );
     }
 
-    // --- MODE: HOST / JOIN ---
+    // 5. Setup Mode (Host/Join)
     if (mode === 'HOST' || mode === 'JOIN') {
         return (
             <div className="h-[100dvh] w-full bg-[#050505] flex flex-col items-center justify-center px-6 relative font-sans">
-                 {notifications}
+                 {/* Global Connection Request Overlay */}
+                 {incomingConnectionRequest && <ConnectionNotification identity={incomingConnectionRequest.identity} peerId={incomingConnectionRequest.peerId} onAccept={acceptConnection} onDecline={() => setIncomingConnectionRequest(null)} />}
                  
                  {showShare && <ShareConnection peerId={myProfile.id} pin={accessPin} onClose={() => setShowShare(false)} />}
 
@@ -794,15 +1028,37 @@ export const IStokView: React.FC = () => {
         );
     }
 
-    // --- MODE: CHAT (Active Session) ---
+    // 6. CHAT MODE (Main)
     return (
         <div className="h-[100dvh] w-full bg-[#050505] flex flex-col font-sans relative overflow-hidden">
              
-             {notifications}
+             {/* TOAST: Incoming Message from other tab/context */}
+             {latestMessageNotif && (
+                 <MessageNotification 
+                     senderName={latestMessageNotif.sender}
+                     messagePreview={latestMessageNotif.text}
+                     onDismiss={() => setLatestMessageNotif(null)}
+                     onClick={() => setLatestMessageNotif(null)}
+                 />
+             )}
+             
+             {/* Global Connection Request Overlay (Even in chat, for multi-peer future proofing) */}
+             {incomingConnectionRequest && <ConnectionNotification identity={incomingConnectionRequest.identity} peerId={incomingConnectionRequest.peerId} onAccept={acceptConnection} onDecline={() => setIncomingConnectionRequest(null)} />}
 
-             {showWalkieTalkie && <IStokWalkieTalkie onClose={() => setShowWalkieTalkie(false)} onSendAudio={(b64, dur, size) => sendMessage('AUDIO', b64, { duration: dur, size, mimeType: 'audio/webm' })} latestMessage={latestAudioMessage} />}
+             {showWalkieTalkie && (
+                 <IStokWalkieTalkie 
+                    onClose={() => setShowWalkieTalkie(false)} 
+                    onSendAudio={(b64, dur, size) => sendMessage('AUDIO', b64, { duration: dur, size, mimeType: 'audio/webm' })}
+                    latestMessage={latestAudioMessage}
+                 />
+             )}
 
-             <MediaDrawer isOpen={showMediaDrawer} onClose={() => setShowMediaDrawer(false)} messages={messages} onViewImage={setViewImage} />
+             <MediaDrawer 
+                isOpen={showMediaDrawer} 
+                onClose={() => setShowMediaDrawer(false)} 
+                messages={messages} 
+                onViewImage={setViewImage} 
+             />
 
              {/* Top Bar */}
              <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-[#09090b]/80 backdrop-blur-md z-10 pt-[calc(env(safe-area-inset-top)+1rem)]">
@@ -820,7 +1076,10 @@ export const IStokView: React.FC = () => {
                  </div>
                  <div className="flex gap-2">
                      {isPeerOnline && (
-                         <button onClick={initiateCall} className="p-2 text-emerald-500 hover:text-white bg-emerald-500/10 hover:bg-emerald-500 rounded-full transition-all active:scale-95">
+                         <button 
+                             onClick={initiateCall}
+                             className="p-2 text-emerald-500 hover:text-white bg-emerald-500/10 hover:bg-emerald-500 rounded-full transition-all active:scale-95"
+                         >
                              <Phone size={18} fill="currentColor" />
                          </button>
                      )}
@@ -837,11 +1096,17 @@ export const IStokView: React.FC = () => {
                          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500">NO_HISTORY</p>
                      </div>
                  )}
-                 {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} setViewImage={setViewImage} />)}
+                 {messages.map((msg) => (
+                    <MessageBubble 
+                        key={msg.id} 
+                        msg={msg} 
+                        setViewImage={setViewImage} 
+                    />
+                 ))}
                  <div ref={msgEndRef} />
              </div>
 
-             {/* Status Overlay */}
+             {/* Status Overlay if disconnected */}
              {!isPeerOnline && stage !== 'IDLE' && (
                  <div className="absolute bottom-20 left-0 right-0 flex justify-center pointer-events-none">
                      <div className="bg-red-500/90 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2 animate-pulse">

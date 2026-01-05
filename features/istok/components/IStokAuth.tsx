@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
     Server, ScanLine, RefreshCw, 
     Fingerprint, Activity, ArrowRight, ShieldCheck,
-    QrCode, Clipboard, Camera, X, Check, Loader2, Lock, Upload
+    QrCode, Clipboard, Camera, X, Check, Loader2, Lock, Upload,
+    ShieldAlert
 } from 'lucide-react';
 // @ts-ignore
 import jsQR from 'jsqr';
@@ -92,7 +93,8 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
     const processRawInput = (text: string) => {
         if (!text) return;
         
-        let foundId = '';
+        // Simple Set for text input (don't over-process unless it looks like a URL)
+        let foundId = text;
         let foundKey = '';
 
         try {
@@ -111,19 +113,14 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
                     foundKey = parts[1];
                 }
             }
-            // Case 3: Just ID
-            else {
-                foundId = text.trim();
-            }
         } catch (e) {}
 
-        if (foundId) {
-            setTargetId(foundId);
+        setTargetId(foundId);
+        
+        if (foundKey) {
+            setPin(foundKey);
             if (navigator.vibrate) navigator.vibrate(50);
-            if (foundKey) {
-                setPin(foundKey);
-                setTimeout(() => onJoin(foundId, foundKey), 500);
-            }
+            setTimeout(() => onJoin(foundId, foundKey), 500);
         }
     };
 
@@ -132,29 +129,26 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
             const text = await navigator.clipboard.readText();
             processRawInput(text);
         } catch (err) {
+            // Fallback: manually focus and paste
             const input = document.getElementById('target-id-input') as HTMLInputElement;
             input?.focus();
-            document.execCommand('paste');
         }
     };
 
     // --- UNIVERSAL QR SCANNER LOGIC ---
     const startScanner = async () => {
         try {
-            // Request Camera (Environment preferred)
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: { ideal: 'environment' } } 
             });
             streamRef.current = stream;
             setIsScanning(true);
             
-            // Wait for video ref to be available in DOM
             setTimeout(() => {
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream;
-                    videoRef.current.setAttribute("playsinline", "true"); // Critical for iOS
+                    videoRef.current.setAttribute("playsinline", "true");
                     videoRef.current.play().then(() => {
-                        // Start the scan loop
                         requestAnimationFrame(scanLoop);
                     }).catch(e => console.error("Play error:", e));
                 }
@@ -178,9 +172,9 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
                     if (barcodes.length > 0) {
                         processRawInput(barcodes[0].rawValue);
                         stopScanner();
-                        return; // Stop loop
+                        return;
                     }
-                }).catch(() => {}); // Ignore errors, continue loop
+                }).catch(() => {});
             }
 
             // 2. Always fallback/run jsQR as well (Robustness)
@@ -193,7 +187,6 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 
-                // Use imported jsQR
                 const code = jsQR(imageData.data, imageData.width, imageData.height, {
                     inversionAttempts: "dontInvert",
                 });
@@ -201,12 +194,10 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
                 if (code && code.data) {
                     processRawInput(code.data);
                     stopScanner();
-                    return; // Stop loop
+                    return; 
                 }
             }
         }
-        
-        // Continue loop
         scanRef.current = requestAnimationFrame(scanLoop);
     };
 
@@ -321,127 +312,35 @@ export const IStokAuth: React.FC<IStokAuthProps> = ({
 
                     <div className="grid grid-cols-5 gap-3 pt-2">
                         <button 
-                            onClick={startScanner}
-                            className="col-span-2 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95"
+                            onClick={startScanner} 
+                            className="col-span-1 h-14 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl flex items-center justify-center text-white transition-all active:scale-95"
+                            title="Scan QR"
                         >
-                            <Camera size={18} /> SCAN
+                            <Camera size={20} />
                         </button>
                         <button 
                             onClick={() => onJoin(targetId, pin)}
                             disabled={!targetId || pin.length < 4}
-                            className="col-span-3 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="col-span-4 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all flex items-center justify-center gap-2"
                         >
-                            CONNECT <ArrowRight size={16} strokeWidth={3} />
+                            CONNECT NOW <ArrowRight size={14} />
                         </button>
                     </div>
                 </div>
 
                 {errorMsg && (
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-center gap-3 text-red-500 text-xs font-medium animate-shake">
-                        <ShieldCheck size={16} />
-                        <span>{errorMsg}</span>
-                        <button onClick={onErrorClear} className="ml-auto"><X size={14}/></button>
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-xl flex items-start gap-3 animate-slide-up">
+                        <ShieldAlert size={16} className="mt-0.5 shrink-0" />
+                        <div className="flex-1">
+                            <p className="text-[10px] font-black uppercase tracking-widest mb-1">CONNECTION_ERROR</p>
+                            <p className="text-xs opacity-90">{errorMsg}</p>
+                        </div>
+                        <button onClick={onErrorClear}><X size={14} /></button>
                     </div>
                 )}
             </div>
         );
     }
 
-    // --- VIEW: DEFAULT DASHBOARD ---
-    return (
-        <div className="flex flex-col items-center justify-center w-full max-w-4xl mx-auto space-y-12 z-10">
-            <div className="text-center space-y-4 animate-slide-down">
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500">
-                    <ShieldCheck size={12}/> TITANIUM RELAY PROTOCOL v0.55
-                </div>
-                <h1 className="text-5xl md:text-7xl font-black italic tracking-tighter text-white uppercase drop-shadow-2xl">
-                    SECURE <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500 animate-gradient-text">UPLINK</span>
-                </h1>
-                <p className="text-neutral-500 font-mono text-xs max-w-md mx-auto leading-relaxed">
-                    AES-256 + FORCE TURN (TCP/443) + HYDRA-LINK HANDOVER. <br/>
-                    {isRelayActive ? (
-                        <span className="text-purple-400 flex items-center justify-center gap-2 mt-1">
-                            <Activity size={10} className="animate-pulse"/> RELAY NODE ACTIVE
-                        </span>
-                    ) : (
-                        <span className="text-neutral-600">RELAY OFFLINE (P2P ONLY)</span>
-                    )}
-                </p>
-            </div>
-
-            <div className="w-full max-w-md relative group animate-slide-up" style={{ animationDelay: '100ms' }}>
-                <div className="bg-[#0a0a0b] border border-white/10 rounded-[32px] p-6 relative overflow-hidden ring-1 ring-white/5">
-                    <div className="flex items-center justify-between relative z-10 mb-4">
-                        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-neutral-500">
-                            <Fingerprint size={12} /> CURRENT_IDENTITY
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                            <span className="text-[9px] font-bold text-emerald-500 tracking-wider">MASKED</span>
-                        </div>
-                    </div>
-                    <div className="flex items-center justify-between relative z-10">
-                        <div className="flex flex-col">
-                            <h2 className="text-3xl md:text-4xl font-black text-white font-mono tracking-tight tabular-nums">
-                                {glitchedIdentity}
-                            </h2>
-                            <p className="text-[8px] text-neutral-600 font-mono mt-1">
-                                HASH: {Math.random().toString(36).substring(7).toUpperCase()}
-                            </p>
-                        </div>
-                        <button onClick={onRegenerateIdentity} className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-white transition-all active:scale-95 border border-white/5 group/btn">
-                            <RefreshCw size={20} className="group-hover/btn:rotate-180 transition-transform duration-500" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div className="w-full max-w-4xl z-10 animate-slide-up grid grid-cols-1 md:grid-cols-2 gap-6" style={{ animationDelay: '200ms' }}>
-                <button onClick={onHost} className="group relative p-8 rounded-[32px] bg-zinc-900/50 border border-white/10 hover:border-emerald-500/50 transition-all duration-500 hover:bg-zinc-900 flex flex-col items-start gap-6 text-left ring-1 ring-transparent hover:ring-emerald-500/20 active:scale-[0.98]">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-transform border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)]">
-                        <Server size={28} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-black text-white uppercase italic tracking-tight mb-2 group-hover:text-emerald-400 transition-colors">HOST FREQUENCY</h3>
-                        <p className="text-xs text-neutral-400 font-medium leading-relaxed font-mono">Create a secure, encrypted room. You become the relay anchor.</p>
-                    </div>
-                    <div className="mt-auto flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity translate-y-2 group-hover:translate-y-0">
-                        INITIALIZE <ArrowRight size={12} />
-                    </div>
-                </button>
-
-                <button onClick={() => setIsJoining(true)} className="group relative p-8 rounded-[32px] bg-zinc-900/50 border border-white/10 hover:border-blue-500/50 transition-all duration-500 hover:bg-zinc-900 flex flex-col items-start gap-6 text-left ring-1 ring-transparent hover:ring-blue-500/20 active:scale-[0.98]">
-                    <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform border border-blue-500/20 shadow-[0_0_30px_rgba(59,130,246,0.1)]">
-                        <ScanLine size={28} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-black text-white uppercase italic tracking-tight mb-2 group-hover:text-blue-400 transition-colors">JOIN FREQUENCY</h3>
-                        <p className="text-xs text-neutral-400 font-medium leading-relaxed font-mono">Connect to an existing anomaly. Requires ID & Access Key.</p>
-                    </div>
-                    <div className="mt-auto flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity translate-y-2 group-hover:translate-y-0">
-                        CONFIGURE <ArrowRight size={12} />
-                    </div>
-                </button>
-            </div>
-            
-            {isJoining && forcedMode === 'DEFAULT' && (
-                <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 animate-fade-in">
-                    <div className="relative w-full max-w-md bg-[#09090b] border border-white/10 rounded-[32px] p-6 shadow-2xl">
-                        <button onClick={() => setIsJoining(false)} className="absolute top-4 right-4 text-neutral-500 hover:text-white z-20"><X size={20}/></button>
-                        <IStokAuth 
-                            identity={identity} 
-                            onRegenerateIdentity={onRegenerateIdentity} 
-                            onHost={onHost} 
-                            onJoin={onJoin} 
-                            errorMsg={errorMsg} 
-                            onErrorClear={onErrorClear} 
-                            isRelayActive={isRelayActive} 
-                            forcedMode="JOIN" 
-                            connectionStage={connectionStage}
-                        />
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+    return null; // Default mode handled in parent
 };
