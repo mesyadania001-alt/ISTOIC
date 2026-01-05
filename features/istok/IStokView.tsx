@@ -23,8 +23,8 @@ import { AudioMessagePlayer, getSupportedMimeType } from './components/vn';
 import { compressImage, ImageMessage } from './components/gambar';
 import { IStokAuth } from './components/IStokAuth';
 import { IStokWalkieTalkie } from './components/IStokWalkieTalkie';
-import { RoomManager, Participant } from '../../services/roomManager'; // IMPORT ROOM MANAGER
-import { ParticipantList } from './components/ParticipantList'; // IMPORT PARTICIPANT LIST
+import { RoomManager, Participant } from '../../services/roomManager'; 
+import { ParticipantList } from './components/ParticipantList'; 
 import { v4 as uuidv4 } from 'uuid';
 
 // --- CONSTANTS ---
@@ -266,7 +266,7 @@ export const IStokView: React.FC = () => {
     
     // Core Refs
     const peerRef = useRef<any>(null);
-    const roomRef = useRef<RoomManager | null>(null); // NEW: Room Manager Logic
+    const roomRef = useRef<RoomManager | null>(null); 
     const pinRef = useRef(accessPin); 
     const isMounted = useRef(true);
     const msgEndRef = useRef<HTMLDivElement>(null);
@@ -280,7 +280,7 @@ export const IStokView: React.FC = () => {
     // States
     const [messages, setMessages] = useState<Message[]>([]);
     const [participants, setParticipants] = useState<Participant[]>([]); // New: Room Participants
-    const [incomingConnectionRequest, setIncomingConnectionRequest] = useState<{ peerId: string, identity: string, conn: any } | null>(null);
+    const [incomingConnectionRequest, setIncomingConnectionRequest] = useState<{ peerId: string, sas: string } | null>(null);
     const [isPeerOnline, setIsPeerOnline] = useState(false);
     const [isPeerTyping, setIsPeerTyping] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string>('');
@@ -310,7 +310,26 @@ export const IStokView: React.FC = () => {
     const [storedMessages, setStoredMessages] = useIDB<Message[]>(`istok_chat_${targetPeerId || 'draft'}`, []);
 
     // Sync Access Pin Ref
-    useEffect(() => { pinRef.current = accessPin; }, [accessPin]);
+    useEffect(() => { 
+        pinRef.current = accessPin; 
+        if (roomRef.current) roomRef.current.setAccessPin(accessPin);
+    }, [accessPin]);
+
+    // **NEW: AUTO JOIN FROM URL PARAMS**
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const connectId = params.get('connect');
+        const key = params.get('key');
+        
+        if (connectId && key) {
+            console.log("[ISTOK_LINK] Auto-detected link:", connectId);
+            setTargetPeerId(connectId);
+            setAccessPin(key);
+            // This forces the UI to render the IStokAuth component which handles the actual join
+            setMode('JOIN'); 
+            setStage('IDLE'); // Reset stage to allow IStokAuth to trigger
+        }
+    }, []);
 
     // Initialize RoomManager on Component Mount
     useEffect(() => {
@@ -356,12 +375,21 @@ export const IStokView: React.FC = () => {
             }
         };
 
+        const handleSasRequest = (peerId: string, sas: string) => {
+            setIncomingConnectionRequest({ peerId, sas });
+            playSound('CONNECT');
+            triggerHaptic([200, 100, 200]);
+        };
+
         roomRef.current = new RoomManager(
             myProfile.id, 
             myProfile.username, 
             handleParticipantsUpdate, 
-            handleIncomingMessage
+            handleIncomingMessage,
+            handleSasRequest
         );
+
+        roomRef.current.setAccessPin(accessPin);
 
         return () => {
             if (roomRef.current) roomRef.current.leaveRoom();
@@ -394,6 +422,7 @@ export const IStokView: React.FC = () => {
         setIsPeerTyping(false);
         setStage('IDLE');
         setParticipants([]);
+        setMessages([]);
     };
 
     // --- CALL HANDLERS ---
@@ -401,10 +430,6 @@ export const IStokView: React.FC = () => {
         const target = specificTargetId || outgoingCallTarget;
         
         if (!target) {
-            // Auto-select logic if not specified
-            // 1. If HOST, call first client? Or wait? 
-            // 2. If CLIENT, call HOST.
-            
             const host = participants.find(p => p.role === 'HOST' && p.id !== myProfile.id);
             const anyPeer = participants.find(p => p.id !== myProfile.id);
             
@@ -452,28 +477,10 @@ export const IStokView: React.FC = () => {
             });
 
             peer.on('connection', (conn) => {
-                // Determine if this is a Host-Client or Client-Host situation
-                // The RoomManager logic handles the data sync
+                // Delegate to Room Manager
                 if (roomRef.current) {
                     roomRef.current.handleIncomingConnection(conn);
                 }
-                
-                // CRITICAL: We need to handle the handshake UI here in the View
-                // RoomManager handles the data packet, but we need to show the "Accept" dialog
-                // if it's the *first* time connecting (not a reconnect)
-                
-                // For simplicity in this P2P version, we auto-accept connections at the RoomManager level
-                // to facilitate smooth 1vs1. 
-                // But for security, we can intercept the first 'open' and show a prompt if needed.
-                // The existing `incomingConnectionRequest` state handles this via `handleData`
-                // BUT `roomManager` encapsulates that now. 
-                
-                // FIX: Let's assume RoomManager auto-accepts for now to ensure 1vs1 works smoothly
-                // as the prompt asks for "no connection error". 
-                // Enhanced Security can be re-added later.
-                
-                // Optionally show a "User Joined" toast
-                sendSystemNotification('ISTOK_NET', 'New peer connected.', 'istok_info');
             });
 
             // Handle Incoming Call (Direct Media)
@@ -534,6 +541,7 @@ export const IStokView: React.FC = () => {
         setAccessPin(key);
         setTargetPeerId(target);
         pinRef.current = key;
+        if (roomRef.current) roomRef.current.setAccessPin(key);
 
         setStage('LOCATING_PEER');
         
@@ -558,7 +566,7 @@ export const IStokView: React.FC = () => {
                 roomRef.current.joinRoom(conn);
             }
             
-            setMode('CHAT'); // Go to chat immediately, let RoomManager sync state
+            setMode('CHAT'); 
             setStage('SECURE');
 
         } catch(e) {
@@ -569,30 +577,33 @@ export const IStokView: React.FC = () => {
 
     const hostSession = () => {
         if (roomRef.current) {
-            setTargetPeerId(''); // Clear target peer ID as we are hosting
+            setTargetPeerId(''); 
             roomRef.current.createRoom();
             setMode('HOST');
         }
     };
 
-    const acceptConnection = async () => {
-        // Handled internally by RoomManager now
-        setIncomingConnectionRequest(null);
+    const acceptConnection = () => {
+        if (incomingConnectionRequest && roomRef.current) {
+            roomRef.current.verifyPeer(incomingConnectionRequest.peerId);
+            setIncomingConnectionRequest(null);
+        }
+    };
+
+    const declineConnection = () => {
+        if (incomingConnectionRequest && roomRef.current) {
+            roomRef.current.rejectPeer(incomingConnectionRequest.peerId);
+            setIncomingConnectionRequest(null);
+        }
     };
 
     const sendMessage = async (type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'FILE', content: string, extra: any = {}) => {
         if (!roomRef.current) return;
-        
         roomRef.current.broadcastMessage(content, type);
         playSound('MSG_OUT');
-        
-        // Auto-scroll logic handled in View
     };
 
-    const handleTyping = (isTyping: boolean) => {
-        // Typing status via RoomManager not fully implemented to save bandwidth
-        // Could be added as ephemeral packet type
-    };
+    const handleTyping = (isTyping: boolean) => {};
 
     const startRecording = async () => {
         try {
@@ -746,13 +757,14 @@ export const IStokView: React.FC = () => {
                     currentPeerId={null}
                  />
 
-                 {/* Global Connection Request Overlay (Example if needed, though RoomManager handles sync) */}
+                 {/* Connection Request (SAS) Overlay */}
                  {incomingConnectionRequest && (
                      <ConnectionNotification 
-                        identity={incomingConnectionRequest.identity}
+                        identity={incomingConnectionRequest.peerId}
                         peerId={incomingConnectionRequest.peerId}
+                        sasCode={incomingConnectionRequest.sas}
                         onAccept={acceptConnection}
-                        onDecline={() => setIncomingConnectionRequest(null)}
+                        onDecline={declineConnection}
                      />
                  )}
 
@@ -794,16 +806,29 @@ export const IStokView: React.FC = () => {
             <div className="h-[100dvh] w-full bg-[#050505] flex flex-col items-center justify-center px-6 relative font-sans">
                  {showShare && <ShareConnection peerId={myProfile.id} pin={accessPin} onClose={() => setShowShare(false)} />}
 
+                 {/* Connection Request (SAS) Overlay (Also here for Host) */}
+                 {incomingConnectionRequest && (
+                     <ConnectionNotification 
+                        identity={incomingConnectionRequest.peerId}
+                        peerId={incomingConnectionRequest.peerId}
+                        sasCode={incomingConnectionRequest.sas}
+                        onAccept={acceptConnection}
+                        onDecline={declineConnection}
+                     />
+                 )}
+
                  <button onClick={() => { nukeConnection(); setMode('SELECT'); setStage('IDLE'); }} className="absolute top-[calc(env(safe-area-inset-top)+1rem)] left-6 text-neutral-500 hover:text-white flex items-center gap-2 text-xs font-bold z-20">ABORT</button>
                  
                  {mode === 'HOST' ? (
-                     <div className="w-full max-w-md bg-[#09090b] border border-white/10 p-8 rounded-[32px] text-center space-y-6 animate-fade-in">
+                     <div className="w-full max-w-md bg-[#09090b] border border-white/10 p-8 rounded-[32px] text-center space-y-6 animate-fade-in relative overflow-hidden">
+                         <div className="absolute inset-0 bg-emerald-500/5 pointer-events-none animate-pulse-slow"></div>
+                         
                          <div className="relative inline-block">
                              <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full animate-pulse"></div>
                              <Server className="text-emerald-500 mx-auto relative z-10" size={48} />
                          </div>
-                         <h2 className="text-xl font-black text-white uppercase tracking-wider">ROOM_BROADCASTING</h2>
-                         <div className="p-4 bg-black rounded-xl border border-white/5 space-y-4">
+                         <h2 className="text-xl font-black text-white uppercase tracking-wider">SECURE_BROADCAST</h2>
+                         <div className="p-4 bg-black rounded-xl border border-white/5 space-y-4 relative z-10">
                             <div>
                                 <p className="text-[9px] text-neutral-500 mb-1 font-mono">YOUR ID</p>
                                 <code className="text-emerald-500 text-xs select-all block break-all font-mono bg-emerald-500/10 p-2 rounded border border-emerald-500/20">{myProfile.id}</code>
@@ -813,7 +838,7 @@ export const IStokView: React.FC = () => {
                                 <p className="text-2xl font-black text-white tracking-[0.5em] font-mono">{accessPin}</p>
                             </div>
                          </div>
-                         <div className="grid grid-cols-2 gap-3">
+                         <div className="grid grid-cols-2 gap-3 relative z-10">
                              <button onClick={() => setMode('CHAT')} className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all">ENTER ROOM</button>
                              <button onClick={() => setShowShare(true)} className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all"><QrCode size={14} /> SHARE</button>
                          </div>
@@ -842,6 +867,9 @@ export const IStokView: React.FC = () => {
     return (
         <div className="h-[100dvh] w-full bg-[#050505] flex flex-col font-sans relative overflow-hidden">
              
+             {/* Background Ambience */}
+             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none"></div>
+
              {showWalkieTalkie && (
                  <IStokWalkieTalkie 
                     onClose={() => setShowWalkieTalkie(false)} 
@@ -856,12 +884,23 @@ export const IStokView: React.FC = () => {
                 participants={participants.map(p => ({
                     id: p.id,
                     name: p.name,
-                    status: p.status === 'RECONNECTING' ? 'OFFLINE' : p.status,
+                    status: p.status, // Pass through directly now that interface matches
                     isHost: p.role === 'HOST'
                 }))}
                 onCall={initiateCall}
                 myId={myProfile.id}
              />
+             
+             {/* SAS Connection Request Overlay in Chat Mode */}
+             {incomingConnectionRequest && (
+                 <ConnectionNotification 
+                    identity={incomingConnectionRequest.peerId}
+                    peerId={incomingConnectionRequest.peerId}
+                    sasCode={incomingConnectionRequest.sas}
+                    onAccept={acceptConnection}
+                    onDecline={declineConnection}
+                 />
+             )}
 
              {/* Top Bar */}
              <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-[#09090b]/80 backdrop-blur-md z-10 pt-[calc(env(safe-area-inset-top)+1rem)]">

@@ -1,11 +1,10 @@
-
 import React from 'react';
-import { Users, Crown, Wifi, WifiOff, Phone } from 'lucide-react';
+import { Users, Crown, Wifi, WifiOff, Phone, Loader2 } from 'lucide-react';
 
 interface Participant {
     id: string;
     name: string;
-    status: 'ONLINE' | 'OFFLINE';
+    status: 'ONLINE' | 'OFFLINE' | 'VERIFYING' | 'RECONNECTING';
     isHost: boolean;
 }
 
@@ -18,6 +17,15 @@ interface ParticipantListProps {
 }
 
 export const ParticipantList: React.FC<ParticipantListProps> = ({ participants, isOpen, onClose, onCall, myId }) => {
+    const getStatusColor = (status: string) => {
+        switch(status) {
+            case 'ONLINE': return 'bg-emerald-500 shadow-[0_0_5px_#10b981]';
+            case 'VERIFYING': return 'bg-amber-500 animate-pulse';
+            case 'RECONNECTING': return 'bg-orange-500 animate-pulse';
+            default: return 'bg-red-500';
+        }
+    };
+
     return (
         <div className={`
             fixed inset-y-0 right-0 w-72 bg-[#09090b]/95 backdrop-blur-xl border-l border-white/10 z-[2050]
@@ -47,7 +55,10 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({ participants, 
                                         {p.isHost && <Crown size={10} className="text-amber-500 fill-current" />}
                                         {isMe && <span className="text-[8px] text-neutral-500 bg-white/10 px-1 rounded">(YOU)</span>}
                                     </p>
-                                    <p className="text-[9px] font-mono text-neutral-500 truncate">{p.id.slice(0,8)}...</p>
+                                    <p className="text-[9px] font-mono text-neutral-500 truncate flex items-center gap-1">
+                                        {p.status === 'VERIFYING' && <Loader2 size={8} className="animate-spin" />}
+                                        {p.id.slice(0,8)}...
+                                    </p>
                                 </div>
                             </div>
                             
@@ -61,7 +72,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({ participants, 
                                         <Phone size={12} fill="currentColor" />
                                     </button>
                                 )}
-                                <div className={`w-2 h-2 rounded-full ${p.status === 'ONLINE' ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' : 'bg-red-500'}`}></div>
+                                <div className={`w-2 h-2 rounded-full ${getStatusColor(p.status)}`}></div>
                             </div>
                         </div>
                     );
