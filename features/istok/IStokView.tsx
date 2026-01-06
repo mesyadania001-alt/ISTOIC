@@ -14,7 +14,7 @@ import {
 
 // --- HOOKS & SERVICES ---
 import useLocalStorage from '../../hooks/useLocalStorage';
-import { OMNI_KERNEL } from '../../services/omniRace'; // Integrasi Omni Race
+import { OMNI_KERNEL } from '../../services/omniRace'; 
 import { SidebarIStokContact, IStokSession } from './components/SidebarIStokContact';
 import { ShareConnection } from './components/ShareConnection'; 
 import { ConnectionNotification } from './components/ConnectionNotification';
@@ -113,7 +113,6 @@ const playSound = (type: 'MSG_IN' | 'MSG_OUT' | 'CONNECT' | 'CALL_RING' | 'BUZZ'
 };
 
 // --- HELPER: ROBUST ICE SERVERS ---
-// Menggabungkan Public STUN dengan Metered (jika ada) untuk menembus firewall
 const getIceServers = async (): Promise<any[]> => {
     const publicIce = [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -126,9 +125,11 @@ const getIceServers = async (): Promise<any[]> => {
 
     try {
         const apiKey = import.meta.env.VITE_METERED_API_KEY;
+        const appDomain = import.meta.env.VITE_METERED_DOMAIN || 'istoic'; 
+
         if (!apiKey) return publicIce;
 
-        const response = await fetch(`https://istoic.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`);
+        const response = await fetch(`https://${appDomain}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`);
         if (!response.ok) return publicIce;
         
         const turnServers = await response.json();
@@ -160,7 +161,7 @@ const BurnerTimer = ({ ttl, onBurn }: { ttl: number, onBurn: () => void }) => {
 };
 
 const MessageBubble = React.memo(({ msg, setViewImage, onBurn }: { msg: Message, setViewImage: (img: string) => void, onBurn: (id: string) => void }) => {
-    const [burnStarted, setBurnStarted] = useState(msg.type !== 'IMAGE'); // Image burns after reveal
+    const [burnStarted, setBurnStarted] = useState(msg.type !== 'IMAGE');
 
     return (
         <div className={`flex ${msg.sender === 'ME' ? 'justify-end' : 'justify-start'} animate-fade-in mb-3`}>
@@ -187,25 +188,18 @@ const MessageBubble = React.memo(({ msg, setViewImage, onBurn }: { msg: Message,
     );
 });
 
-// --- INPUT COMPONENT WITH OMNI RACE INTEGRATION ---
 const IStokInput = React.memo(({ onSend, onTyping, disabled, isRecording, recordingTime, isVoiceMasked, onToggleMask, onStartRecord, onStopRecord, onAttach, ttlMode, onToggleTtl, onAiAssist, isAiThinking }: any) => {
     const [text, setText] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Expose setText to parent/AI
     useEffect(() => {
-        if (inputRef.current) {
-            // Logic to allow external updates if needed, but simplistic approach:
-            // Just bind value={text} is enough if we controlled it
-        }
+        // Expose control if needed
     }, []);
 
-    // Helper to insert AI text
     const insertText = (newText: string) => setText(newText);
 
     return (
         <div className="bg-[#09090b] border-t border-white/10 p-3 z-20 pb-[max(env(safe-area-inset-bottom),1rem)]">
-            {/* Toolbar */}
             <div className="flex items-center justify-between mb-2 px-1">
                  <div className="flex gap-2">
                      <button onClick={onToggleTtl} className={`flex items-center gap-1.5 px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider transition-all ${ttlMode > 0 ? 'bg-red-500/10 border-red-500/30 text-red-500' : 'bg-white/5 border-white/5 text-neutral-500'}`}>
@@ -286,8 +280,8 @@ export const IStokView: React.FC = () => {
     const [isRecording, setIsRecording] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
     const [isVoiceMasked, setIsVoiceMasked] = useState(false);
-    const [ttlMode, setTtlMode] = useState(0); // 0 = Off
-    const [isAiThinking, setIsAiThinking] = useState(false); // Omni Race State
+    const [ttlMode, setTtlMode] = useState(0); 
+    const [isAiThinking, setIsAiThinking] = useState(false); 
 
     // NOTIFICATIONS
     const [incomingRequest, setIncomingRequest] = useState<any>(null);
@@ -329,6 +323,24 @@ export const IStokView: React.FC = () => {
         } catch(e) {}
     }, []);
 
+    // LOGIC: HELPER FUNCTIONS (Moved inside component body)
+    
+    const startHeartbeat = useCallback(() => {
+        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+        heartbeatRef.current = setInterval(() => {
+            if (!connRef.current?.open) setIsPeerOnline(false);
+            else {
+                connRef.current.send({ type: 'PING' });
+                setIsPeerOnline(true);
+            }
+        }, HEARTBEAT_MS);
+    }, []);
+
+    const handleDisconnect = useCallback(() => {
+        setIsPeerOnline(false);
+        setStage('RECONNECTING');
+    }, []);
+
     // PEER INIT (POWERFUL VERSION)
     useEffect(() => {
         let mounted = true;
@@ -353,7 +365,6 @@ export const IStokView: React.FC = () => {
                 peer.on('open', () => {
                     console.log("[ISTOK_NET] Peer Ready:", myProfile.id);
                     setStage('IDLE');
-                    // Auto-Execute Pending Join
                     if (pendingJoin) {
                         setTimeout(() => joinSession(pendingJoin.id, pendingJoin.pin), 500);
                         setPendingJoin(null);
@@ -422,7 +433,7 @@ export const IStokView: React.FC = () => {
             }
         });
 
-        conn.on('data', (d: any) => handleData(d));
+        conn.on('data', (d: any) => handleData(d, conn));
         conn.on('close', handleDisconnect);
         conn.on('error', () => { setStage('IDLE'); setErrorMsg("Conn Error"); });
     };
@@ -495,31 +506,36 @@ export const IStokView: React.FC = () => {
                 if(!document.hasFocus()) setLatestNotif({sender: 'Peer', text: msg.type});
             }
         }
-        else if (data.type === 'PING') { /* Heartbeat Ack */ }
+        else if (data.type === 'PING') { 
+            // Pong logic if needed, or just keep alive
+        }
         else if (data.type === 'SIGNAL' && data.action === 'BUZZ') { triggerHaptic([100,50,100]); playSound('BUZZ'); }
     };
 
-    // --- LOGIC: OMNI RACE AI (NEW) ---
+    // --- LOGIC: OMNI RACE AI ---
     const handleAiAssist = async (currentText: string, setTextCallback: (t: string) => void) => {
         setIsAiThinking(true);
         playSound('AI_THINK');
         
-        // Context: Last 5 messages
         const context = messages.slice(-5).map(m => `${m.sender}: ${m.content}`).join('\n');
         const prompt = currentText ? 
             `Draft a continuation or reply for: "${currentText}". Context:\n${context}` : 
             `Suggest a reply to the last message. Context:\n${context}`;
 
         try {
-            // Using OMNI_KERNEL from service to race Gemini/Groq/OpenAI
-            const stream = OMNI_KERNEL.raceStream(prompt, "You are a helpful, brief chat assistant. Respond in Indonesian (Bahasa Gaul/Santai).");
-            
-            let fullDraft = '';
-            for await (const chunk of stream) {
-                if (chunk.text) {
-                    fullDraft += chunk.text;
-                    setTextCallback(fullDraft); // Realtime typing effect in input
+            // Check if OMNI_KERNEL is available, else mock it or handle error
+            if (OMNI_KERNEL && OMNI_KERNEL.raceStream) {
+                const stream = OMNI_KERNEL.raceStream(prompt, "You are a helpful, brief chat assistant. Respond in Indonesian.");
+                let fullDraft = '';
+                for await (const chunk of stream) {
+                    if (chunk.text) {
+                        fullDraft += chunk.text;
+                        setTextCallback(fullDraft);
+                    }
                 }
+            } else {
+               // Fallback if Omni not loaded
+               setTimeout(() => setTextCallback("AI Engine not ready."), 1000);
             }
         } catch (e) {
             console.error("AI Race Failed", e);
@@ -562,7 +578,6 @@ export const IStokView: React.FC = () => {
     if (mode === 'SELECT') {
         return (
             <div className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-6 relative font-sans overflow-hidden">
-                {/* Background Decor */}
                 <div className="absolute top-[-20%] left-[-20%] w-[50%] h-[50%] bg-emerald-500/10 blur-[100px] rounded-full pointer-events-none"></div>
                 
                 {incomingRequest && (
@@ -570,8 +585,7 @@ export const IStokView: React.FC = () => {
                         identity={incomingRequest.identity} 
                         peerId={incomingRequest.peerId} 
                         onAccept={async () => {
-                            // Accept Logic
-                            const { conn, identity } = incomingRequest;
+                            const { conn } = incomingRequest;
                             connRef.current = conn;
                             const payload = JSON.stringify({ type: 'CONNECTION_ACCEPT', identity: myProfile.username });
                             const enc = await encryptData(payload, pinRef.current);
@@ -762,19 +776,6 @@ export const IStokView: React.FC = () => {
                 };
                 r.readAsDataURL(f);
             }}/>
-
-            const startHeartbeat = () => {
-                if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-                heartbeatRef.current = setInterval(() => {
-                    if (!connRef.current?.open) setIsPeerOnline(false);
-                    else setIsPeerOnline(true); 
-                }, HEARTBEAT_MS);
-            };
-
-            const handleDisconnect = () => {
-                setIsPeerOnline(false);
-                setStage('RECONNECTING');
-            };
         </div>
     );
 };
