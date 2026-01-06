@@ -82,7 +82,7 @@ const getSecureEndpoint = (provider: string): string => {
         case 'OPENAI': return SECURITY_MATRIX.synthesizeEndpoint([104,116,116,112,115,58,47,47,97,112,105,46,111,112,101,110,97,105,46,99,111,109,47,118,49,47,99,104,97,116,47,99,111,109,112,108,101,116,105,111,110,115]);
         case 'XAI': return SECURITY_MATRIX.synthesizeEndpoint([104,116,116,112,115,58,47,47,97,112,105,46,120,46,97,105,47,118,49,47,99,104,97,116,47,99,111,109,112,108,101,116,105,111,110,115]);
         case 'OPENROUTER': return SECURITY_MATRIX.synthesizeEndpoint([104,116,116,112,115,58,47,47,111,112,101,110,114,111,117,116,101,114,46,97,105,47,97,112,105,47,118,49,47,99,104,97,116,47,99,111,109,112,108,101,116,105,111,110,115]);
-        // https://api.mistral.ai/v1/chat/completions
+        // MISTRAL: https://api.mistral.ai/v1/chat/completions
         case 'MISTRAL': return SECURITY_MATRIX.synthesizeEndpoint([104,116,116,112,115,58,47,47,97,112,105,46,109,105,115,116,114,97,108,46,97,105,47,118,49,47,99,104,97,116,47,99,111,109,112,108,101,116,105,111,110,115]);
         default: return '';
     }
@@ -354,7 +354,7 @@ export async function generateMultiModalImage(provider: string, modelId: string,
                 if (options?.aspectRatio === '16:9') size = "1792x1024";
                 else if (options?.aspectRatio === '9:16') size = "1024x1792";
             }
-            const endpoint = SECURITY_MATRIX.synthesizeEndpoint([104,116,116,112,115,58,47,47,97,112,105,46,111,112,101,110,97,105,46,99,111,109,47,118,49,47,99,104,97,116,47,99,111,109,112,108,101,116,105,111,110,115]);
+            const endpoint = SECURITY_MATRIX.synthesizeEndpoint([104,116,116,112,115,58,47,47,97,112,105,46,111,112,101,110,97,105,46,99,111,109,47,118,49,47,105,109,97,103,101,115,47,103,101,110,101,114,97,116,105,111,110,115]);
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },

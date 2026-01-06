@@ -1,4 +1,3 @@
-
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Terminal, ZapOff, Copy, Check, ShieldAlert } from 'lucide-react';
 import { debugService } from '../services/debugService';
@@ -23,21 +22,20 @@ interface ErrorBoundaryState {
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-      copied: false
-    };
-  }
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null,
+    errorInfo: null,
+    copied: false
+  };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error, errorInfo: null, copied: false };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // Only set errorInfo if we want to store stack trace in state, 
+    // note that getDerivedStateFromError already handles hasError/error.
     this.setState({ errorInfo });
     
     const view = this.props.viewName || 'UNKNOWN_MODULE';
