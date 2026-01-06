@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     X, User, Trash2, Edit3, Activity, Clock, 
@@ -51,7 +50,7 @@ interface SidebarIStokContactProps {
 export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
     isOpen,
     onClose,
-    sessions,
+    sessions = [], // Default empty array safety
     profile,
     onSelect,
     onCallContact,
@@ -76,7 +75,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
         if (!newContactId || !newContactName) return;
         
         // Prevent duplicate IDs
-        if (contacts.some(c => c.id === newContactId)) {
+        if (contacts && contacts.some(c => c && c.id === newContactId)) {
             alert("Kontak dengan ID ini sudah ada.");
             return;
         }
@@ -88,7 +87,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
             trustLevel: 'UNKNOWN'
         };
 
-        setContacts(prev => [...prev, newContact]);
+        setContacts(prev => [...(prev || []), newContact]);
         setIsAddingContact(false);
         setNewContactId('');
         setNewContactName('');
@@ -103,26 +102,44 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
 
     // Merge logic: Check if active sessions match any saved contacts
     const mergedSessions = useMemo(() => {
-        return sessions.map(s => {
-            const contact = contacts.find(c => c.id === s.id);
-            return {
-                ...s,
-                name: contact ? contact.name : (s.customName || s.name),
-                isContact: !!contact
-            };
-        }).sort((a, b) => b.lastSeen - a.lastSeen);
+        if (!Array.isArray(sessions)) return [];
+        
+        // FILTER: Hanya proses sesi yang valid (tidak null/undefined)
+        return sessions
+            .filter(s => s && s.id) // <--- FIX UTAMA: Mencegah crash jika data korup
+            .map(s => {
+                // Safety check untuk contacts juga
+                const contact = Array.isArray(contacts) 
+                    ? contacts.find(c => c && c.id === s.id) 
+                    : undefined;
+                    
+                return {
+                    ...s,
+                    name: contact ? contact.name : (s.customName || s.name || 'Unknown'),
+                    isContact: !!contact
+                };
+            })
+            .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
     }, [sessions, contacts]);
 
-    const filteredSessions = mergedSessions.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
-    
-    const filteredContacts = contacts.filter(c => 
-        c.name.toLowerCase().includes(search.toLowerCase()) || 
-        c.id.includes(search)
+    const filteredSessions = mergedSessions.filter(s => 
+        (s.name || '').toLowerCase().includes(search.toLowerCase())
     );
+    
+    const filteredContacts = Array.isArray(contacts) 
+        ? contacts.filter(c => 
+            c && (
+                (c.name || '').toLowerCase().includes(search.toLowerCase()) || 
+                (c.id || '').includes(search)
+            )
+        )
+        : [];
 
     const handleCopyId = () => {
-        navigator.clipboard.writeText(profile.id);
-        alert("ID Anda disalin. Bagikan ke teman agar mereka bisa 'Add Contact'.");
+        if (profile && profile.id) {
+            navigator.clipboard.writeText(profile.id);
+            alert("ID Anda disalin. Bagikan ke teman agar mereka bisa 'Add Contact'.");
+        }
     };
 
     return (
@@ -161,7 +178,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                         <div className="flex-1 min-w-0">
                             <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-0.5">MY ID</p>
                             <code className="text-xs font-mono text-white truncate block cursor-pointer hover:text-emerald-400 transition-colors" onClick={handleCopyId}>
-                                {profile.id}
+                                {profile?.id || 'Generating...'}
                             </code>
                         </div>
                         <button onClick={onRegenerateProfile} className="p-2 text-neutral-500 hover:text-white" title="Reset Identity">
@@ -212,6 +229,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                                 </div>
                             ) : (
                                 filteredSessions.map(s => {
+                                    if (!s) return null; // Extra safety
                                     const isConnected = currentPeerId === s.id;
                                     return (
                                         <div 
@@ -224,7 +242,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                                         >
                                             <div className="relative">
                                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${s.isContact ? 'bg-blue-600' : 'bg-neutral-700'}`}>
-                                                    {s.name.substring(0, 2).toUpperCase()}
+                                                    {(s.name || '?').substring(0, 2).toUpperCase()}
                                                 </div>
                                                 {s.status === 'ONLINE' && <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#09090b]"></div>}
                                             </div>
@@ -234,7 +252,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                                                     <h4 className={`text-xs font-bold truncate ${isConnected ? 'text-emerald-400' : 'text-white'}`}>
                                                         {s.name}
                                                     </h4>
-                                                    <span className="text-[8px] font-mono text-neutral-600">{new Date(s.lastSeen).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                                    <span className="text-[8px] font-mono text-neutral-600">{new Date(s.lastSeen || Date.now()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                                                 </div>
                                                 <p className="text-[9px] text-neutral-500 truncate flex items-center gap-1">
                                                     {isConnected ? <Wifi size={8} className="text-emerald-500"/> : <Activity size={8}/>}
@@ -319,7 +337,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                                         onClick={() => onCallContact(c)}
                                     >
                                         <div className="w-10 h-10 rounded-full bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 flex items-center justify-center shrink-0 font-bold text-sm">
-                                            {c.name.substring(0, 2).toUpperCase()}
+                                            {(c.name || '?').substring(0, 2).toUpperCase()}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <h4 className="text-xs font-bold text-white truncate">{c.name}</h4>
