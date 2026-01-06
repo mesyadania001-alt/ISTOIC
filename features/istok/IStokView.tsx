@@ -11,7 +11,7 @@ import {
     QrCode, Lock, Flame, 
     ShieldAlert, ArrowLeft, BrainCircuit, Sparkles,
     Wifi, Radio, Paperclip, Check,
-    User, Image as ImageIcon, FileText, Download, Play, Pause, Trash2, LogIn, Chrome
+    User, Image as ImageIcon, FileText, Download, Play, Pause, Trash2, LogIn, Chrome, Loader2
 } from 'lucide-react';
 
 // --- HOOKS & SERVICES ---
@@ -105,6 +105,10 @@ export const IStokView: React.FC = () => {
     const [showCall, setShowCall] = useState(false);
     const [viewImage, setViewImage] = useState<string | null>(null);
 
+    // Auth UI State
+    const [authLoading, setAuthLoading] = useState(false);
+    const [authError, setAuthError] = useState<string | null>(null);
+
     // Notifications
     const [incomingRequest, setIncomingRequest] = useState<any>(null);
     const [incomingCall, setIncomingCall] = useState<any>(null);
@@ -150,9 +154,17 @@ export const IStokView: React.FC = () => {
 
     // --- GOOGLE AUTH HANDLER ---
     const handleLogin = async () => {
-        const user = await IstokIdentityService.loginWithGoogle();
-        if (user) {
-            setIdentity(user);
+        setAuthLoading(true);
+        setAuthError(null);
+        try {
+            const user = await IstokIdentityService.loginWithGoogle();
+            if (user) {
+                setIdentity(user);
+            }
+        } catch (e: any) {
+            setAuthError(e.message || "Authentication failed");
+        } finally {
+            setAuthLoading(false);
         }
     };
 
@@ -387,10 +399,17 @@ export const IStokView: React.FC = () => {
                         </p>
                         <button 
                             onClick={handleLogin}
-                            className="w-full py-4 bg-white text-black hover:bg-neutral-200 rounded-xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95"
+                            disabled={authLoading}
+                            className="w-full py-4 bg-white text-black hover:bg-neutral-200 rounded-xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-[0_0_30px_rgba(255,255,255,0.1)]"
                         >
-                            <Chrome size={18} /> Login with Google
+                            {authLoading ? <Loader2 size={18} className="animate-spin" /> : <Chrome size={18} />}
+                            Login with Google
                         </button>
+                        {authError && (
+                            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs font-medium">
+                                {authError}
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center justify-center gap-2 text-[10px] text-emerald-500/60 font-mono">

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Loader2, Fingerprint, Lock, ShieldAlert, ScanFace, Chrome, UserPlus, KeyRound, CheckCircle2, RefreshCw } from 'lucide-react';
 import { verifySystemPin, isSystemPinConfigured, setSystemPin } from '../../utils/crypto';
@@ -92,25 +93,33 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
     // --- GOOGLE LOGIN ---
     const handleGoogleLogin = async () => {
         setLoading(true);
-        const userProfile = await IstokIdentityService.loginWithGoogle();
-        
-        if (userProfile) {
-            // Jika user sudah punya ID di DB, simpan dan lanjut
-            if (userProfile.istokId) {
-                setIdentity(userProfile);
-                // Check PIN next
-                if (isSystemPinConfigured()) {
-                    onAuthSuccess(); // Fast path for existing users
+        setError(null);
+        try {
+            const userProfile = await IstokIdentityService.loginWithGoogle();
+            
+            if (userProfile) {
+                // Jika user sudah punya ID di DB, simpan dan lanjut
+                if (userProfile.istokId) {
+                    setIdentity(userProfile);
+                    // Check PIN next
+                    if (isSystemPinConfigured()) {
+                        onAuthSuccess(); // Fast path for existing users
+                    } else {
+                        setStage('SETUP_PIN');
+                    }
                 } else {
-                    setStage('SETUP_PIN');
+                    // User baru -> Setup ID
+                    setStage('CREATE_ID');
+                    (window as any).tempGoogleUser = userProfile;
                 }
-            } else {
-                // User baru -> Setup ID
-                setStage('CREATE_ID');
-                (window as any).tempGoogleUser = userProfile;
             }
+        } catch (err: any) {
+            setError(err.message || "Login Failed");
+            setShake(true); 
+            setTimeout(() => setShake(false), 500);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     // --- CREATE ID (FIRST TIME) ---
@@ -131,11 +140,16 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         };
 
         setLoading(true);
-        // Save to Firestore
-        await IstokIdentityService.createProfile(newIdentity);
-        setIdentity(newIdentity);
-        setLoading(false);
-        setStage('SETUP_PIN');
+        try {
+            // Save to Firestore
+            await IstokIdentityService.createProfile(newIdentity);
+            setIdentity(newIdentity);
+            setStage('SETUP_PIN');
+        } catch (err: any) {
+            setError(err.message || "Failed to create profile");
+        } finally {
+            setLoading(false);
+        }
     };
 
     // --- SETUP PIN ---
@@ -248,6 +262,11 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                                 {loading ? <Loader2 size={18} className="animate-spin"/> : <Chrome size={18} />}
                                 ACCESS WITH GOOGLE
                             </button>
+                            {error && (
+                                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs font-medium">
+                                    {error}
+                                </div>
+                            )}
                             <div className="flex items-center justify-center gap-2 text-[9px] text-emerald-500/60 font-mono">
                                 <ShieldAlert size={12} /> CLOUD ENCRYPTED IDENTITY
                             </div>
@@ -271,6 +290,9 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                                     maxLength={12}
                                 />
                              </div>
+                             {error && (
+                                <div className="text-red-500 text-[10px] text-center font-bold">{error}</div>
+                             )}
                              <button onClick={handleCreateIdentity} disabled={loading} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2">
                                 {loading ? <Loader2 className="animate-spin"/> : <ArrowRight />} LANJUT
                              </button>
@@ -291,6 +313,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                                 className="w-full bg-[#121214] border border-white/10 rounded-2xl py-5 text-center text-3xl font-black text-white tracking-[0.5em] focus:border-amber-500 outline-none"
                                 placeholder="••••"
                             />
+                            {error && <p className="text-red-500 text-[10px] font-bold">{error}</p>}
                             <button onClick={handleSetupPin} className="w-full py-4 bg-amber-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest">
                                 SET PASSCODE
                             </button>

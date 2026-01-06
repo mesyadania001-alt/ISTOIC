@@ -17,10 +17,9 @@ export interface IStokUserIdentity {
 
 export const IstokIdentityService = {
     
-    loginWithGoogle: async (): Promise<IStokUserIdentity | null> => {
+    loginWithGoogle: async (): Promise<IStokUserIdentity> => {
         if (!auth) {
-            alert("Firebase Configuration Missing in .env");
-            return null;
+            throw new Error("Firebase Configuration Missing in .env");
         }
         
         try {
@@ -53,13 +52,12 @@ export const IstokIdentityService = {
 
             // Handle User Cancellation Gracefully
             if (errCode === 'auth/popup-closed-by-user' || errMsg.includes('closed-by-user')) {
-                console.log("Login cancelled by user.");
-                return null;
+                throw new Error("Login cancelled by user.");
             }
 
             // Handle Cross-Origin-Opener-Policy blocking
             if (errCode === 'auth/popup-blocked' || errMsg.includes('Cross-Origin-Opener-Policy')) {
-                alert("Login blocked by browser policy. Please allow popups or try a different browser.");
+                throw new Error("Popup blocked. Please check browser settings or switch to a compatible browser.");
             }
 
             debugService.log('ERROR', 'ISTOK_AUTH', 'LOGIN_FAIL', `${errCode}: ${errMsg}`);
@@ -74,15 +72,12 @@ export const IstokIdentityService = {
                 errMsg.includes('unauthorized-domain')
             ) {
                 const currentDomain = window.location.hostname;
-                friendlyMsg = `Domain "${currentDomain}" belum diizinkan di Firebase. \n\nSOLUSI DEVELOPER:\n1. Buka Firebase Console\n2. Menu Authentication > Settings > Authorized Domains\n3. Tambahkan: ${currentDomain}`;
-            } else if (errCode === 'auth/popup-blocked') {
-                friendlyMsg = "Popup login diblokir oleh browser. Izinkan popup untuk situs ini.";
+                friendlyMsg = `Domain "${currentDomain}" unauthorized. Add to Firebase Console > Auth > Settings.`;
             } else if (errCode === 'auth/network-request-failed') {
-                friendlyMsg = "Koneksi jaringan gagal. Periksa internet Anda.";
+                friendlyMsg = "Network connection failed. Please check your internet.";
             }
 
-            alert(`Login Gagal: ${friendlyMsg}`);
-            return null;
+            throw new Error(friendlyMsg);
         }
     },
 
@@ -100,6 +95,7 @@ export const IstokIdentityService = {
             localStorage.setItem('istok_user_identity', JSON.stringify(identity));
         } catch (e) {
             console.error("Profile Creation Error", e);
+            throw e;
         }
     },
 
