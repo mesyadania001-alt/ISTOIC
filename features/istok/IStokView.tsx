@@ -5,7 +5,7 @@ import {
 import { TeleponanView } from '../teleponan/TeleponanView';
 import { activatePrivacyShield } from '../../utils/privacyShield';
 import { 
-    Send, Zap, ScanLine, Server,
+    Send, Zap, ScanLine, Server, X,
     Mic, Menu, PhoneCall, 
     QrCode, Lock, Flame, 
     ShieldAlert, ArrowLeft, BrainCircuit, Sparkles,
@@ -23,7 +23,7 @@ import { CallNotification } from './components/CallNotification';
 import { MessageBubble } from './components/MessageBubble'; 
 import { QRScanner } from './components/QRScanner'; 
 import { compressImage } from './components/gambar';
-import { AudioMessagePlayer } from './components/vn'; 
+// import { AudioMessagePlayer } from './components/vn'; // Uncomment jika sudah ada filenya
 
 // --- HYDRA CONSTANTS ---
 const CHUNK_SIZE = 65536; // 64KB Chunks for 5G/WiFi6 Optimization
@@ -340,7 +340,6 @@ export const IStokView: React.FC = () => {
     
     // --- NETWORK LISTENER (HYDRA SENSE) ---
     useEffect(() => {
-        // Deteksi jenis koneksi (4G/WiFi) untuk optimasi
         const updateNetworkInfo = () => {
             const conn = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
             if (conn) {
@@ -349,14 +348,11 @@ export const IStokView: React.FC = () => {
         };
         updateNetworkInfo();
         
-        // Listener perubahan jaringan (Hot-Switching)
         const handleNetworkChange = () => {
             console.log("[HYDRA] Network Topology Changed. Triggering Re-Route...");
             setNetworkType((prev) => 'switch-' + Date.now());
-            // Jika sedang chat, lakukan soft reconnect
             if (stage === 'SECURE' && targetPeerId && accessPin) {
                 setStage('NETWORK_SWITCH');
-                // Beri waktu 1 detik untuk IP stabil, lalu paksa reconnect
                 setTimeout(() => {
                     handleDisconnect(); 
                 }, 1000);
@@ -403,7 +399,6 @@ export const IStokView: React.FC = () => {
                 if (isPeerOnline) handleDisconnect();
             } else {
                 connRef.current.send({ type: 'PING' });
-                // Reset reconnect logic if successful ping
                 reconnectAttemptsRef.current = 0;
             }
         }, HEARTBEAT_MS);
@@ -413,11 +408,10 @@ export const IStokView: React.FC = () => {
         setIsPeerOnline(false);
         setStage('RECONNECTING');
         
-        // Auto-Heal Hydra Logic
         if (reconnectAttemptsRef.current < HYDRA_RECONNECT_LIMIT && targetPeerId && accessPin) {
             reconnectAttemptsRef.current++;
             console.log(`[HYDRA] Healing Link... Attempt ${reconnectAttemptsRef.current}`);
-            setTimeout(() => joinSession(targetPeerId, accessPin), 1000); // Fast retry
+            setTimeout(() => joinSession(targetPeerId, accessPin), 1000); 
         } else {
             setErrorMsg("Link Severed. Network Unstable.");
         }
@@ -516,8 +510,8 @@ export const IStokView: React.FC = () => {
                     config: { 
                         iceServers, 
                         sdpSemantics: 'unified-plan', 
-                        iceCandidatePoolSize: 10, // Aggressive pre-fetch
-                        iceTransportPolicy: 'all' // FORCE TCP/UDP/RELAY
+                        iceCandidatePoolSize: 10,
+                        iceTransportPolicy: 'all' 
                     },
                     retry_timer: 500
                 });
@@ -585,16 +579,14 @@ export const IStokView: React.FC = () => {
         }
 
         setStage('LOCATING_PEER');
-        // Aggressive connection options for Mobile/4G
         const conn = peerRef.current.connect(target, { 
             reliable: true,
             serialization: 'json',
             metadata: {
-                ua: navigator.userAgent // Help debug peer type
+                ua: navigator.userAgent
             }
         });
         
-        // Timeout safeguard
         const timeoutGuard = setTimeout(() => {
             if (stage === 'LOCATING_PEER') {
                 conn.close();
@@ -643,20 +635,25 @@ export const IStokView: React.FC = () => {
         setTargetPeerId(data);
     };
 
-    // --- POWERFUL AI FEATURES ---
+    // --- IMPROVED AI FEATURES (CONTEXT AWARE & ROBUST) ---
 
     const handleAiAssist = async (currentText: string, setTextCallback: (t: string) => void) => {
         setIsAiThinking(true);
         playSound('AI_THINK');
         
-        const context = messages.slice(-5).map(m => `${m.sender}: ${m.content}`).join('\n');
-        const prompt = currentText ? 
-            `Draft a continuation or reply for: "${currentText}". Context:\n${context}` : 
-            `Suggest a reply to the last message. Context:\n${context}`;
+        // Mengambil 10 Pesan Terakhir untuk konteks yang lebih dalam
+        const context = messages.slice(-10).map(m => `[${m.sender}]: ${m.content}`).join('\n');
+        
+        let prompt = "";
+        if (currentText) {
+            prompt = `You are a sophisticated AI assistant in a secure chat app. The user is typing: "${currentText}". Based on the context below, complete this sentence or draft a better version of it. Keep it concise, professional, and tactical.\n\nContext:\n${context}`;
+        } else {
+            prompt = `You are a sophisticated AI assistant. Based on the conversation context below, suggest a relevant and intelligent reply for the user (ME). Format: just the text options.\n\nContext:\n${context}`;
+        }
 
         try {
             if (OMNI_KERNEL && OMNI_KERNEL.raceStream) {
-                const stream = OMNI_KERNEL.raceStream(prompt, "You are a helpful chat assistant.");
+                const stream = OMNI_KERNEL.raceStream(prompt, "System AI Agent");
                 let fullDraft = '';
                 for await (const chunk of stream) {
                     if (chunk.text) {
@@ -665,21 +662,30 @@ export const IStokView: React.FC = () => {
                     }
                 }
             } else {
-               setTimeout(() => setTextCallback("AI Engine Sleeping."), 500);
+               // Fallback cerdas jika Kernel Offline atau lambat
+               setTimeout(() => {
+                   const fallbacks = [
+                       "Acknowledged. Proceeding.",
+                       "Can you elaborate on that?",
+                       "Data received. Analyzing.",
+                       "Standby for confirmation."
+                   ];
+                   const randomReply = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+                   setTextCallback(currentText ? `${currentText}...` : randomReply);
+               }, 800);
             }
         } catch (e) {
-            console.error(e);
+            console.error("AI Core Error:", e);
         } finally {
             setIsAiThinking(false);
         }
     };
 
-    // --- CORE TRANSLATE LOGIC ---
     const performNeuralTranslation = async (text: string, langName: string): Promise<string> => {
         if (!text) return text;
         try {
             if (OMNI_KERNEL && OMNI_KERNEL.raceStream) {
-                const prompt = `Translate to ${langName}. No explanation. Text: "${text}"`;
+                const prompt = `Translate the following text to ${langName} immediately. Only output the translation, no explanations. Text: "${text}"`;
                 const stream = OMNI_KERNEL.raceStream(prompt, "Translator.");
                 let fullTranslation = '';
                 for await (const chunk of stream) {
@@ -724,7 +730,6 @@ export const IStokView: React.FC = () => {
         const encrypted = await encryptData(JSON.stringify(payloadObj), pinRef.current);
         if (!encrypted) return;
 
-        // Optimized Chunking for high-latency networks
         if (encrypted.length > CHUNK_SIZE) {
             const id = crypto.randomUUID();
             const total = Math.ceil(encrypted.length / CHUNK_SIZE);
@@ -733,7 +738,6 @@ export const IStokView: React.FC = () => {
                     type: 'CHUNK', id, idx: i, total, 
                     chunk: encrypted.slice(i*CHUNK_SIZE, (i+1)*CHUNK_SIZE)
                 });
-                // Small yield to keep UI responsive on mobile
                 if (i % 5 === 0) await new Promise(r => setTimeout(r, 0));
             }
         } else {
@@ -744,14 +748,15 @@ export const IStokView: React.FC = () => {
         playSound('MSG_OUT');
     };
 
-    // --- RENDER ---
-    
-    if (mode === 'SELECT') {
+    // ==========================================
+    // GLOBAL OVERLAY (NOTIFIKASI LEVEL TERATAS)
+    // ==========================================
+    const renderGlobalNotification = () => {
+        if (!incomingRequest) return null;
+
         return (
-            <div className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-6 relative font-sans overflow-hidden">
-                <div className="absolute top-[-20%] left-[-20%] w-[50%] h-[50%] bg-emerald-500/10 blur-[100px] rounded-full pointer-events-none"></div>
-                
-                {incomingRequest && (
+            <div className="fixed inset-0 w-full h-full z-[1000000] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+                <div className="w-full max-w-md relative z-[1000001]">
                     <ConnectionNotification 
                         identity={incomingRequest.identity} 
                         peerId={incomingRequest.peerId} 
@@ -766,217 +771,106 @@ export const IStokView: React.FC = () => {
                         }} 
                         onDecline={()=>{ setIncomingRequest(null); }} 
                     />
-                )}
-
-                <div className="text-center z-10 space-y-2 mb-10">
-                    <h1 className="text-5xl font-black text-white italic tracking-tighter drop-shadow-lg">IStoic <span className="text-emerald-500">HYDRA</span></h1>
-                    <div className="flex items-center justify-center gap-2">
-                        <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 text-[9px] font-bold rounded border border-emerald-500/20 flex items-center gap-1"><Zap size={8}/> 4G/WiFi OMNI</span>
-                        <span className="px-2 py-0.5 bg-blue-500/10 text-blue-500 text-[9px] font-bold rounded border border-blue-500/20">METERED.CA ACCELERATED</span>
-                    </div>
                 </div>
+            </div>
+        );
+    };
 
-                <div className="grid gap-4 w-full max-w-xs z-10">
-                    <button onClick={()=>{setAccessPin(Math.floor(100000+Math.random()*900000).toString()); setMode('HOST');}} className="group relative p-5 bg-[#09090b] border border-white/10 hover:border-emerald-500/50 rounded-2xl flex items-center gap-4 transition-all overflow-hidden">
-                        <div className="absolute inset-0 bg-emerald-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                        <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-500 relative"><Server size={24}/></div>
-                        <div className="text-left relative">
-                            <h3 className="text-white font-bold tracking-wide">HOST SECURE</h3>
-                            <p className="text-[10px] text-neutral-500">Master Node / Room</p>
-                        </div>
-                    </button>
-
-                    <button onClick={()=>setMode('JOIN')} className="group relative p-5 bg-[#09090b] border border-white/10 hover:border-blue-500/50 rounded-2xl flex items-center gap-4 transition-all overflow-hidden">
-                        <div className="absolute inset-0 bg-blue-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                        <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500 relative"><ScanLine size={24}/></div>
-                        <div className="text-left relative">
-                            <h3 className="text-white font-bold tracking-wide">JOIN TARGET</h3>
-                            <p className="text-[10px] text-neutral-500">Universal Uplink</p>
-                        </div>
-                    </button>
+    // ==========================================
+    // APP CONTENT RENDERER
+    // ==========================================
+    const renderAppContent = () => {
+        if (mode === 'SELECT') {
+            return (
+                <div className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-6 relative font-sans overflow-hidden">
+                    <div className="absolute top-[-20%] left-[-20%] w-[50%] h-[50%] bg-emerald-500/10 blur-[100px] rounded-full pointer-events-none"></div>
                     
-                    <button onClick={()=>setShowSidebar(true)} className="p-4 text-neutral-500 hover:text-white text-xs font-bold tracking-widest flex items-center justify-center gap-2">
-                        <Menu size={14}/> CONTACTS
-                    </button>
-                </div>
-
-                <SidebarIStokContact 
-                    isOpen={showSidebar} onClose={()=>setShowSidebar(false)} sessions={sessions} profile={myProfile}
-                    onSelect={(s)=>{ setTargetPeerId(s.id); setAccessPin(s.pin); joinSession(s.id, s.pin); setShowSidebar(false); }}
-                    onCallContact={()=>{}} onRenameSession={()=>{}} onDeleteSession={()=>{}} onRegenerateProfile={()=>{}} currentPeerId={null}
-                />
-            </div>
-        );
-    }
-
-    if (mode === 'HOST' || mode === 'JOIN') {
-        return (
-            <div className="h-[100dvh] bg-black flex flex-col items-center justify-center p-6 relative">
-                {showScanner && <QRScanner onScan={handleQRScan} onClose={()=>setShowScanner(false)} />}
-
-                <button onClick={()=>{setMode('SELECT'); setStage('IDLE');}} className="absolute top-6 left-6 text-neutral-500 hover:text-white flex items-center gap-2 text-xs font-bold"><ArrowLeft size={16}/> ABORT</button>
-                
-                {mode === 'HOST' ? (
-                    <div className="w-full max-w-sm bg-[#09090b] border border-white/10 p-8 rounded-[32px] text-center space-y-6 animate-slide-up relative overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/5 to-transparent pointer-events-none"></div>
-                        <div className="relative inline-flex">
-                            <div className="absolute inset-0 bg-emerald-500 blur-xl opacity-20 animate-pulse"></div>
-                            <Server className="text-emerald-500 relative z-10" size={48} />
+                    <div className="text-center z-10 space-y-2 mb-10">
+                        <h1 className="text-5xl font-black text-white italic tracking-tighter drop-shadow-lg">IStoic <span className="text-emerald-500">HYDRA</span></h1>
+                        <div className="flex items-center justify-center gap-2">
+                            <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 text-[9px] font-bold rounded border border-emerald-500/20 flex items-center gap-1"><Zap size={8}/> 4G/WiFi OMNI</span>
+                            <span className="px-2 py-0.5 bg-blue-500/10 text-blue-500 text-[9px] font-bold rounded border border-blue-500/20">METERED.CA ACCELERATED</span>
                         </div>
-                        <div>
-                            <p className="text-[10px] text-neutral-500 font-mono mb-2">SIGNAL ID</p>
-                            <code className="block bg-black p-3 rounded-lg border border-white/10 text-emerald-500 text-xs font-mono break-all select-all shadow-inner">{myProfile.id}</code>
-                        </div>
-                        <div>
-                            <p className="text-[10px] text-neutral-500 font-mono mb-2">ACCESS PIN</p>
-                            <div className="text-3xl font-black text-white tracking-[0.5em]">{accessPin}</div>
-                        </div>
-                        <button onClick={()=>setShowShare(true)} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 border border-white/5"><QrCode size={14}/> SHOW QR</button>
                     </div>
-                ) : (
-                    <div className="w-full max-w-sm space-y-4 animate-slide-up">
-                        <div className="text-center mb-8">
-                            <div onClick={()=>setShowScanner(true)} className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 cursor-pointer hover:bg-blue-500/20 transition border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.3)]">
-                                <ScanLine className="text-blue-500" size={32}/>
+
+                    <div className="grid gap-4 w-full max-w-xs z-10">
+                        <button onClick={()=>{setAccessPin(Math.floor(100000+Math.random()*900000).toString()); setMode('HOST');}} className="group relative p-5 bg-[#09090b] border border-white/10 hover:border-emerald-500/50 rounded-2xl flex items-center gap-4 transition-all overflow-hidden">
+                            <div className="absolute inset-0 bg-emerald-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                            <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-500 relative"><Server size={24}/></div>
+                            <div className="text-left relative">
+                                <h3 className="text-white font-bold tracking-wide">HOST SECURE</h3>
+                                <p className="text-[10px] text-neutral-500">Master Node / Room</p>
                             </div>
-                            <h2 className="text-xl font-bold text-white">ESTABLISH UPLINK</h2>
-                            <p className="text-xs text-neutral-500">Global Search & Connect</p>
-                        </div>
+                        </button>
+
+                        <button onClick={()=>setMode('JOIN')} className="group relative p-5 bg-[#09090b] border border-white/10 hover:border-blue-500/50 rounded-2xl flex items-center gap-4 transition-all overflow-hidden">
+                            <div className="absolute inset-0 bg-blue-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                            <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500 relative"><ScanLine size={24}/></div>
+                            <div className="text-left relative">
+                                <h3 className="text-white font-bold tracking-wide">JOIN TARGET</h3>
+                                <p className="text-[10px] text-neutral-500">Universal Uplink</p>
+                            </div>
+                        </button>
                         
-                        {stage === 'IDLE' ? (
-                            <>
-                                <input value={targetPeerId} onChange={e=>setTargetPeerId(e.target.value)} placeholder="TARGET ID" className="w-full bg-[#09090b] p-4 rounded-xl text-white border border-white/10 outline-none text-center font-mono focus:border-blue-500 transition-colors shadow-inner"/>
-                                <input value={accessPin} onChange={e=>setAccessPin(e.target.value)} placeholder="PIN" className="w-full bg-[#09090b] p-4 rounded-xl text-white border border-white/10 outline-none text-center font-mono tracking-widest focus:border-blue-500 transition-colors shadow-inner"/>
-                                <div className="flex gap-3">
-                                    <button onClick={()=>setShowScanner(true)} className="p-4 bg-white/5 hover:bg-white/10 rounded-xl text-white border border-white/5"><Camera size={20}/></button>
-                                    <button onClick={()=>joinSession()} className="flex-1 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 transition-all active:scale-95">CONNECT NOW</button>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center space-y-4">
-                                <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
-                                <span className="text-xs font-mono text-blue-500 animate-pulse">{stage}...</span>
+                        <button onClick={()=>setShowSidebar(true)} className="p-4 text-neutral-500 hover:text-white text-xs font-bold tracking-widest flex items-center justify-center gap-2">
+                            <Menu size={14}/> CONTACTS
+                        </button>
+                    </div>
+
+                    <div className="relative z-50">
+                        <SidebarIStokContact 
+                            isOpen={showSidebar} onClose={()=>setShowSidebar(false)} sessions={sessions} profile={myProfile}
+                            onSelect={(s)=>{ setTargetPeerId(s.id); setAccessPin(s.pin); joinSession(s.id, s.pin); setShowSidebar(false); }}
+                            onCallContact={()=>{}} onRenameSession={()=>{}} onDeleteSession={()=>{}} onRegenerateProfile={()=>{}} currentPeerId={null}
+                        />
+                    </div>
+                </div>
+            );
+        }
+
+        if (mode === 'HOST' || mode === 'JOIN') {
+            return (
+                <div className="h-[100dvh] bg-black flex flex-col items-center justify-center p-6 relative z-0">
+                    {showScanner && <div className="z-10"><QRScanner onScan={handleQRScan} onClose={()=>setShowScanner(false)} /></div>}
+
+                    <button onClick={()=>{setMode('SELECT'); setStage('IDLE');}} className="absolute top-6 left-6 text-neutral-500 hover:text-white flex items-center gap-2 text-xs font-bold z-20"><ArrowLeft size={16}/> ABORT</button>
+                    
+                    {mode === 'HOST' ? (
+                        <div className="w-full max-w-sm bg-[#09090b] border border-white/10 p-8 rounded-[32px] text-center space-y-6 animate-slide-up relative overflow-hidden z-10">
+                            <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/5 to-transparent pointer-events-none"></div>
+                            <div className="relative inline-flex">
+                                <div className="absolute inset-0 bg-emerald-500 blur-xl opacity-20 animate-pulse"></div>
+                                <Server className="text-emerald-500 relative z-10" size={48} />
                             </div>
-                        )}
-                        {errorMsg && <div className="text-red-500 text-xs text-center font-mono bg-red-500/10 p-2 rounded border border-red-500/20">{errorMsg}</div>}
-                    </div>
-                )}
-                {showShare && <ShareConnection peerId={myProfile.id} pin={accessPin} onClose={()=>setShowShare(false)}/>}
-            </div>
-        );
-    }
-
-    // CHAT MODE
-    return (
-        <div className="h-[100dvh] bg-[#050505] flex flex-col font-sans relative">
-            {/* OVERLAYS */}
-            {viewImage && <div className="fixed inset-0 z-[50] bg-black/95 flex items-center justify-center p-4" onClick={()=>setViewImage(null)}><img src={viewImage} className="max-w-full max-h-full rounded shadow-2xl"/></div>}
-            
-            {incomingCall && !showCall && <CallNotification identity={incomingCall.peer} onAnswer={()=>{setShowCall(true)}} onDecline={()=>{incomingCall.close(); setIncomingCall(null);}} />}
-            
-            {showCall && <TeleponanView onClose={()=>{setShowCall(false); setIncomingCall(null);}} existingPeer={peerRef.current} initialTargetId={targetPeerId} incomingCall={incomingCall} secretPin={pinRef.current}/>}
-
-            {/* HEADER */}
-            <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-[#09090b] z-20 pt-[calc(env(safe-area-inset-top)+1rem)] shadow-md">
-                <div className="flex items-center gap-3">
-                    <button onClick={()=>{connRef.current?.close(); setMode('SELECT'); setMessages([]);}} className="text-neutral-400 hover:text-white"><ArrowLeft size={20}/></button>
-                    <div className="relative">
-                        <div className={`w-3 h-3 rounded-full ${isPeerOnline ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-red-500'} transition-all duration-500`}></div>
-                        {isPeerOnline && <div className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-75"></div>}
-                    </div>
-                    <div>
-                        <h1 className="text-xs font-black text-white tracking-widest flex items-center gap-2">
-                            SECURE_LINK <span className="text-[8px] px-1 bg-white/10 rounded text-neutral-400">{reconnectAttemptsRef.current > 0 ? `HYDRA-${reconnectAttemptsRef.current}` : 'STABLE'}</span>
-                        </h1>
-                        <span className="text-[8px] text-neutral-500 font-mono uppercase flex items-center gap-1">
-                            {stage === 'SECURE' ? <Activity size={8}/> : <WifiOff size={8}/>} {stage}
-                        </span>
-                    </div>
-                </div>
-                <div className="flex gap-3">
-                    <button onClick={()=>{connRef.current?.send({type:'SIGNAL', action:'BUZZ'}); triggerHaptic([50,50,50]);}} className="text-yellow-500 hover:text-yellow-400 p-2 hover:bg-white/5 rounded-full"><Zap size={18}/></button>
-                    <button onClick={()=>setShowCall(true)} className="text-emerald-500 hover:text-emerald-400 p-2 hover:bg-white/5 rounded-full"><PhoneCall size={18}/></button>
-                </div>
-            </div>
-
-            {/* MESSAGES */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scroll bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-95">
-                {messages.map(m => (
-                    <MessageBubble key={m.id} msg={m} setViewImage={setViewImage} onBurn={(id: string)=>setMessages(p=>p.filter(x=>x.id!==id))} />
-                ))}
-                {!isPeerOnline && (
-                    <div className="flex justify-center mt-4 animate-bounce">
-                        <span className="bg-red-500/20 text-red-500 text-[10px] px-3 py-1 rounded-full flex items-center gap-2 border border-red-500/30">
-                            <WifiOff size={10}/> HYDRA PROTOCOL: RE-ROUTING...
-                        </span>
-                    </div>
-                )}
-                <div ref={msgEndRef} />
-            </div>
-
-            {/* INPUT */}
-            <IStokInput 
-                onSend={(t:string)=>sendMessage('TEXT', t)}
-                onTyping={()=>{}}
-                disabled={!isPeerOnline && stage !== 'RECONNECTING' && stage !== 'NETWORK_SWITCH'}
-                isRecording={isRecording}
-                recordingTime={recordingTime}
-                isVoiceMasked={isVoiceMasked}
-                onToggleMask={()=>setIsVoiceMasked(!isVoiceMasked)}
-                onStartRecord={async ()=>{
-                    try {
-                        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-                        const recorder = new MediaRecorder(stream);
-                        mediaRecorderRef.current = recorder;
-                        audioChunksRef.current = [];
-                        recorder.ondataavailable = e => audioChunksRef.current.push(e.data);
-                        recorder.start();
-                        setIsRecording(true);
-                        setRecordingTime(0);
-                        recordingIntervalRef.current = setInterval(()=>setRecordingTime(p=>p+1),1000);
-                    } catch(e) { alert("Mic Error"); }
-                }}
-                onStopRecord={()=>{
-                    if(mediaRecorderRef.current && isRecording) {
-                        mediaRecorderRef.current.stop();
-                        mediaRecorderRef.current.onstop = () => {
-                            const blob = new Blob(audioChunksRef.current, {type:'audio/webm'});
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                                const b64 = (reader.result as string).split(',')[1];
-                                sendMessage('AUDIO', b64, {duration:recordingTime, isMasked:isVoiceMasked});
-                            };
-                            reader.readAsDataURL(blob);
-                            setIsRecording(false);
-                            clearInterval(recordingIntervalRef.current);
-                        };
-                    }
-                }}
-                onAttach={()=>fileInputRef.current?.click()}
-                ttlMode={ttlMode}
-                onToggleTtl={()=>setTtlMode(p => p===0 ? 10 : (p===10 ? 60 : 0))}
-                onAiAssist={handleAiAssist}
-                isAiThinking={isAiThinking}
-                translateTarget={translateTarget}
-                setTranslateTarget={setTranslateTarget}
-                connectionQuality={connectionQuality}
-                networkType={networkType}
-            />
-            <input type="file" ref={fileInputRef} className="hidden" onChange={(e)=>{
-                const f = e.target.files?.[0];
-                if(!f) return;
-                const r = new FileReader();
-                r.onload = async (ev) => {
-                    const res = ev.target?.result as string;
-                    if(f.type.startsWith('image/')) {
-                        const cmp = await compressImage(f);
-                        sendMessage('IMAGE', cmp.base64.split(',')[1], {size:cmp.size});
-                    } else {
-                        sendMessage('FILE', res.split(',')[1], {fileName:f.name, size:f.size, mimeType:f.type});
-                    }
-                };
-                r.readAsDataURL(f);
-            }}/>
-        </div>
-    );
-};
+                            <div>
+                                <p className="text-[10px] text-neutral-500 font-mono mb-2">SIGNAL ID</p>
+                                <code className="block bg-black p-3 rounded-lg border border-white/10 text-emerald-500 text-xs font-mono break-all select-all shadow-inner">{myProfile.id}</code>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-neutral-500 font-mono mb-2">ACCESS PIN</p>
+                                <div className="text-3xl font-black text-white tracking-[0.5em]">{accessPin}</div>
+                            </div>
+                            <button onClick={()=>setShowShare(true)} className="w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 border border-white/5"><QrCode size={14}/> SHOW QR</button>
+                        </div>
+                    ) : (
+                        <div className="w-full max-w-sm space-y-4 animate-slide-up z-10">
+                            <div className="text-center mb-8">
+                                <div onClick={()=>setShowScanner(true)} className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 cursor-pointer hover:bg-blue-500/20 transition border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.3)]">
+                                    <ScanLine className="text-blue-500" size={32}/>
+                                </div>
+                                <h2 className="text-xl font-bold text-white">ESTABLISH UPLINK</h2>
+                                <p className="text-xs text-neutral-500">Global Search & Connect</p>
+                            </div>
+                            
+                            {stage === 'IDLE' ? (
+                                <>
+                                    <input value={targetPeerId} onChange={e=>setTargetPeerId(e.target.value)} placeholder="TARGET ID" className="w-full bg-[#09090b] p-4 rounded-xl text-white border border-white/10 outline-none text-center font-mono focus:border-blue-500 transition-colors shadow-inner"/>
+                                    <input value={accessPin} onChange={e=>setAccessPin(e.target.value)} placeholder="PIN" className="w-full bg-[#09090b] p-4 rounded-xl text-white border border-white/10 outline-none text-center font-mono tracking-widest focus:border-blue-500 transition-colors shadow-inner"/>
+                                    <div className="flex gap-3">
+                                        <button onClick={()=>setShowScanner(true)} className="p-4 bg-white/5 hover:bg-white/10 rounded-xl text-white border border-white/5"><Camera size={20}/></button>
+                                        <button onClick={()=>joinSession()} className="flex-1 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 transition-all active:scale-95">CONNECT NOW</button>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center space-y-4">
+                                    <div className="w-12 h-12 border-4 border-blue-500/30 border-t
