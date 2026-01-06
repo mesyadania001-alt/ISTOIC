@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Play, Pause, Loader2, Ghost, AlertCircle, Lock, FastForward } from 'lucide-react';
 
@@ -29,7 +30,7 @@ const formatTime = (seconds: number) => {
 
 // --- COMPONENT: VISUALIZER BAR ---
 // Render statis bars yang terlihat seperti waveform
-const WaveformBar = ({ active, height }: { active: boolean, height: number }) => (
+const WaveformBar: React.FC<{ active: boolean, height: number }> = ({ active, height }) => (
     <div 
         className={`w-1 rounded-full transition-all duration-150 ${active ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-white/10'}`}
         style={{ height: `${height}%` }}

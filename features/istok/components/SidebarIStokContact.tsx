@@ -2,14 +2,17 @@ import React, { useState, useMemo } from 'react';
 import { 
     X, User, Trash2, Activity, Search, ArrowRight,
     Wifi, RefreshCw, Users, UserPlus, MessageSquare,
-    Save, Copy, Check, ShieldCheck, Zap
+    Save, Copy, Check, ShieldCheck, Zap, LogOut
 } from 'lucide-react';
 import useLocalStorage from '../../../hooks/useLocalStorage';
+import { IstokIdentityService } from '../services/istokIdentity';
 
 // --- TYPES ---
 export interface IStokContact {
-    id: string;      // ID Peer (Unik)
+    id: string;      // ID Peer (ISTOIC-...)
     name: string;    // Nama Alias
+    email?: string;  // Optional
+    photoURL?: string; 
     addedAt: number;
     trustLevel: 'VERIFIED' | 'UNKNOWN';
 }
@@ -18,6 +21,7 @@ export interface IStokSession {
     id: string; 
     name: string; 
     customName?: string;
+    photoURL?: string;
     lastSeen: number;
     status: 'ONLINE' | 'BACKGROUND' | 'OFFLINE';
     pin: string;
@@ -26,8 +30,10 @@ export interface IStokSession {
 }
 
 export interface IStokProfile {
-    id: string;
-    username: string;
+    id: string;           
+    username: string;     
+    email?: string;       
+    photoURL?: string;    
     created: number;
 }
 
@@ -40,7 +46,7 @@ interface SidebarIStokContactProps {
     onCallContact: (contact: IStokContact) => void;
     onRenameSession: (id: string, newName: string) => void;
     onDeleteSession: (id: string) => void;
-    onRegenerateProfile: () => void;
+    onLogout: () => void;
     currentPeerId: string | null;
 }
 
@@ -64,38 +70,45 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
     onSelect,
     onCallContact,
     onDeleteSession,
-    onRegenerateProfile,
+    onLogout,
     currentPeerId
 }) => {
     // --- STATE ---
     const [activeTab, setActiveTab] = useState<'CHATS' | 'CONTACTS'>('CHATS');
-    const [contacts, setContacts] = useLocalStorage<IStokContact[]>('istok_saved_contacts', []);
+    const [contacts, setContacts] = useLocalStorage<IStokContact[]>('istok_saved_contacts_v2', []);
     const [search, setSearch] = useState('');
+    
+    // Add Contact Form
     const [isAddingContact, setIsAddingContact] = useState(false);
-    const [newContactId, setNewContactId] = useState('');
-    const [newContactName, setNewContactName] = useState('');
+    const [contactName, setContactName] = useState(''); // Nama Tampilan
+    const [targetId, setTargetId] = useState(''); // User Input (e.g. BARISTA)
+    
     const [copied, setCopied] = useState(false);
 
     // --- LOGIC ---
 
-    const handleAddContact = () => {
-        if (!newContactId || !newContactName) return;
+    const handleAddContact = async () => {
+        if (!targetId || !contactName) return;
+        
+        // AUTO-FORMAT: ISTOIC-[INPUT]
+        const finalId = IstokIdentityService.resolveId(targetId);
+
         // Cek duplikat
-        if (contacts && contacts.some(c => c && c.id === newContactId)) {
+        if (contacts && contacts.some(c => c && c.id === finalId)) {
             alert("Kontak sudah ada!"); 
             return;
         }
         
         const newContact: IStokContact = {
-            id: newContactId.trim(),
-            name: newContactName.trim(),
+            id: finalId,
+            name: contactName.trim(),
             addedAt: Date.now(),
-            trustLevel: 'UNKNOWN'
+            trustLevel: 'VERIFIED'
         };
         
         setContacts(prev => [...(prev || []), newContact]);
         setIsAddingContact(false);
-        setNewContactId(''); setNewContactName('');
+        setTargetId(''); setContactName('');
         setActiveTab('CONTACTS');
     };
 
@@ -113,16 +126,18 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
         }
     };
 
-    // Filter & Merge Data (POWERFUL & SAFE)
+    // Filter & Merge Data
     const mergedSessions = useMemo(() => {
         if (!Array.isArray(sessions)) return [];
+        
         return sessions
-            .filter(s => s && s.id) // SAFETY FIRST: Buang data corrupt
+            .filter(s => s && s.id)
             .map(s => {
                 const contact = Array.isArray(contacts) ? contacts.find(c => c && c.id === s.id) : undefined;
                 return { 
                     ...s, 
-                    displayName: contact ? contact.name : (s.customName || s.name || 'Unknown User'),
+                    displayName: contact ? contact.name : (s.customName || s.name || 'Unknown Agent'),
+                    photoURL: contact?.photoURL || s.photoURL,
                     isContact: !!contact 
                 };
             })
@@ -134,7 +149,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
     );
     
     const filteredContacts = Array.isArray(contacts) ? contacts.filter(c => 
-        c && ((c.name || '').toLowerCase().includes(search.toLowerCase()) || (c.id || '').includes(search))
+        c && ((c.name || '').toLowerCase().includes(search.toLowerCase()) || (c.id || '').toLowerCase().includes(search))
     ) : [];
 
     // --- RENDER ---
@@ -153,20 +168,34 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                 ${isOpen ? 'translate-x-0' : 'translate-x-full'}
             `}>
                 
-                {/* 1. Header Profile */}
-                <div className="p-5 border-b border-white/10 bg-[#050505] relative overflow-hidden">
+                {/* 1. Header Profile (Google Style) */}
+                <div className="p-6 border-b border-white/10 bg-[#050505] relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-[50px] rounded-full pointer-events-none"></div>
                     
-                    <div className="flex justify-between items-start mb-4 relative z-10">
+                    <div className="flex justify-between items-start mb-6 relative z-10">
                         <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white flex items-center gap-2">
-                            <Zap size={14} className="text-emerald-500 fill-current"/> ISTOK_NET
+                            <Zap size={14} className="text-emerald-500 fill-current"/> ISTOK_SECURE
                         </h2>
                         <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full transition"><X size={18} className="text-neutral-500 hover:text-white" /></button>
                     </div>
 
+                    <div className="flex items-center gap-4 mb-4 relative z-10">
+                        {profile.photoURL ? (
+                            <img src={profile.photoURL} alt="Profile" className="w-12 h-12 rounded-full border border-white/20 shadow-lg object-cover"/>
+                        ) : (
+                            <div className="w-12 h-12 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-lg shadow-lg border border-white/10">
+                                {profile.username.substring(0,1)}
+                            </div>
+                        )}
+                        <div className="flex-1 overflow-hidden">
+                            <h3 className="text-white font-bold text-sm truncate">{profile.username}</h3>
+                            <p className="text-neutral-500 text-[10px] truncate">{profile.email || "No Email Linked"}</p>
+                        </div>
+                    </div>
+
                     <div className="p-3 bg-white/5 rounded-xl border border-white/5 backdrop-blur-md relative group">
                         <div className="flex items-center justify-between mb-1">
-                            <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">MY SECURE ID</p>
+                            <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">YOUR ISTOIC ID</p>
                             <button onClick={handleCopyId} className="text-neutral-500 hover:text-emerald-400 transition">
                                 {copied ? <Check size={12}/> : <Copy size={12}/>}
                             </button>
@@ -175,10 +204,11 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                             onClick={handleCopyId}
                             className="text-xs font-mono text-emerald-400 block cursor-pointer select-all truncate hover:opacity-80 transition"
                         >
-                            {profile?.id || 'GENERATING...'}
+                            {profile?.id || '...'}
                         </code>
+                        
                         <div className="absolute -bottom-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={onRegenerateProfile} className="p-1.5 bg-black/50 rounded-tl-lg text-neutral-400 hover:text-white" title="Ganti Identity"><RefreshCw size={10}/></button>
+                            <button onClick={onLogout} className="p-1.5 bg-red-900/50 rounded-tl-lg text-red-200 hover:text-white" title="Sign Out"><LogOut size={10}/></button>
                         </div>
                     </div>
                 </div>
@@ -196,7 +226,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                             onClick={() => setActiveTab('CONTACTS')} 
                             className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${activeTab === 'CONTACTS' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/20' : 'text-neutral-500 hover:text-white'}`}
                         >
-                            <Users size={12}/> KONTAK
+                            <Users size={12}/> FRIENDS
                         </button>
                     </div>
                     
@@ -238,9 +268,13 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                                             `}
                                         >
                                             <div className="relative">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-inner ${s.isContact ? 'bg-indigo-600' : 'bg-neutral-700'}`}>
-                                                    {(s.displayName || '?').substring(0, 2).toUpperCase()}
-                                                </div>
+                                                {s.photoURL ? (
+                                                     <img src={s.photoURL} alt="User" className="w-10 h-10 rounded-full object-cover shadow-sm border border-white/10"/>
+                                                ) : (
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-inner ${s.isContact ? 'bg-indigo-600' : 'bg-neutral-700'}`}>
+                                                        {(s.displayName || '?').substring(0, 2).toUpperCase()}
+                                                    </div>
+                                                )}
                                                 {s.status === 'ONLINE' && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#09090b]"></div>}
                                             </div>
                                             
@@ -254,27 +288,9 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                                                 <div className="flex items-center gap-1.5">
                                                     {s.isContact && <ShieldCheck size={10} className="text-indigo-400"/>}
                                                     <p className="text-[9px] text-neutral-500 truncate font-mono">
-                                                        {isConnected ? 'ENCRYPTED_TUNNEL_ACTIVE' : s.id.substring(0, 12) + '...'}
+                                                        {isConnected ? 'LIVE_UPLINK' : s.id.substring(0, 8) + '...'}
                                                     </p>
                                                 </div>
-                                            </div>
-
-                                            {/* Quick Actions on Hover */}
-                                            <div className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-[#09090b]/80 backdrop-blur rounded-lg p-1">
-                                                {!s.isContact && (
-                                                    <button 
-                                                        onClick={(e)=>{e.stopPropagation(); setNewContactId(s.id); setNewContactName(s.displayName); setIsAddingContact(true);}}
-                                                        className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded hover:bg-indigo-500 hover:text-white"
-                                                    >
-                                                        <UserPlus size={14}/>
-                                                    </button>
-                                                )}
-                                                <button 
-                                                    onClick={(e)=>{e.stopPropagation(); onDeleteSession(s.id);}} 
-                                                    className="p-1.5 bg-red-500/20 text-red-400 rounded hover:bg-red-500 hover:text-white"
-                                                >
-                                                    <Trash2 size={14}/>
-                                                </button>
                                             </div>
                                         </div>
                                     );
@@ -291,33 +307,39 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                                     onClick={()=>setIsAddingContact(true)} 
                                     className="w-full py-3 border border-dashed border-white/10 bg-white/5 rounded-xl text-neutral-400 hover:text-emerald-400 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 mb-4"
                                 >
-                                    <UserPlus size={14}/> ADD NEW CONTACT
+                                    <UserPlus size={14}/> ADD NEW FRIEND
                                 </button>
                             ) : (
                                 <div className="p-4 bg-white/5 rounded-2xl border border-white/10 mb-4 animate-slide-up">
-                                    <h4 className="text-[10px] font-black text-white uppercase tracking-widest mb-3 flex items-center gap-2"><UserPlus size={12}/> NEW ENTRY</h4>
+                                    <h4 className="text-[10px] font-black text-white uppercase tracking-widest mb-3 flex items-center gap-2"><UserPlus size={12}/> NEW CONNECTION</h4>
+                                    
                                     <div className="space-y-2">
                                         <div className="space-y-1">
-                                            <label className="text-[8px] text-neutral-500 font-bold ml-1">DISPLAY NAME</label>
+                                            <label className="text-[8px] text-neutral-500 font-bold ml-1">NAME</label>
                                             <input 
-                                                value={newContactName} 
-                                                onChange={e=>setNewContactName(e.target.value)} 
+                                                value={contactName} 
+                                                onChange={e=>setContactName(e.target.value)} 
                                                 className="w-full bg-black border border-white/10 p-2.5 rounded-lg text-xs text-white focus:border-emerald-500 outline-none"
-                                                placeholder="e.g. Agent Smith"
+                                                placeholder="e.g. Bestie"
                                             />
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-[8px] text-neutral-500 font-bold ml-1">PEER ID</label>
-                                            <input 
-                                                value={newContactId} 
-                                                onChange={e=>setNewContactId(e.target.value)} 
-                                                className="w-full bg-black border border-white/10 p-2.5 rounded-lg text-xs text-emerald-500 font-mono focus:border-emerald-500 outline-none"
-                                                placeholder="ISTOK-..."
-                                            />
+                                            <label className="text-[8px] text-neutral-500 font-bold ml-1">ISTOIC ID (e.g. BARISTA)</label>
+                                            <div className="flex items-center bg-black border border-white/10 rounded-lg focus-within:border-emerald-500 transition-all px-2.5">
+                                                <span className="text-[10px] font-black text-emerald-500 mr-1">ISTOIC-</span>
+                                                <input 
+                                                    value={targetId} 
+                                                    onChange={e=>setTargetId(e.target.value.toUpperCase())} 
+                                                    className="w-full bg-transparent border-none p-2 text-xs text-white outline-none font-mono"
+                                                    placeholder="CODENAME"
+                                                />
+                                            </div>
                                         </div>
                                         <div className="flex gap-2 pt-2">
                                             <button onClick={()=>setIsAddingContact(false)} className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-neutral-400">CANCEL</button>
-                                            <button onClick={handleAddContact} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[10px] font-bold text-white shadow-lg flex items-center justify-center gap-2"><Save size={12}/> SAVE</button>
+                                            <button onClick={handleAddContact} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[10px] font-bold text-white shadow-lg flex items-center justify-center gap-2">
+                                                <Save size={12}/> SAVE
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -326,7 +348,7 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                             {filteredContacts.length === 0 && !isAddingContact ? (
                                 <div className="flex flex-col items-center justify-center h-40 opacity-30 text-neutral-500 space-y-2">
                                     <Users size={32} strokeWidth={1}/>
-                                    <p className="text-[10px] font-bold tracking-widest">NO SAVED CONTACTS</p>
+                                    <p className="text-[10px] font-bold tracking-widest">NO SAVED FRIENDS</p>
                                 </div>
                             ) : (
                                 filteredContacts.map(c => (
@@ -336,11 +358,11 @@ export const SidebarIStokContact: React.FC<SidebarIStokContactProps> = ({
                                         onClick={()=>onCallContact(c)}
                                     >
                                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-900 to-indigo-700 text-white flex items-center justify-center font-bold text-sm shadow-lg">
-                                            {(c.name || '?').substring(0,2).toUpperCase()}
+                                            {c.photoURL ? <img src={c.photoURL} className="w-full h-full rounded-full object-cover"/> : (c.name || '?').substring(0,2).toUpperCase()}
                                         </div>
                                         <div className="flex-1 overflow-hidden">
                                             <h4 className="text-xs font-bold text-white truncate">{c.name}</h4>
-                                            <p className="text-[9px] text-neutral-500 truncate font-mono">{c.id.substring(0, 16)}...</p>
+                                            <p className="text-[9px] text-neutral-500 truncate font-mono">{c.id}</p>
                                         </div>
                                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button 

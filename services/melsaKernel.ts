@@ -42,6 +42,23 @@ export const MODEL_CATALOG: ModelMetadata[] = [
     description: 'Open Source standard running on LPU hardware.', 
     specs: { context: '128K', contextLimit: 128000, speed: 'INSTANT', intelligence: 9.3 } 
   },
+  // MISTRAL MODELS ADDITION
+  {
+      id: 'mistral-large-latest',
+      name: 'Mistral Large',
+      category: 'MISTRAL_NATIVE',
+      provider: 'MISTRAL',
+      description: 'Mistral flagship model. Top-tier reasoning capabilities.',
+      specs: { context: '32K', contextLimit: 32000, speed: 'FAST', intelligence: 9.7 }
+  },
+  {
+      id: 'mistral-medium-latest',
+      name: 'Mistral Medium',
+      category: 'MISTRAL_NATIVE',
+      provider: 'MISTRAL',
+      description: 'Balanced performance and latency.',
+      specs: { context: '32K', contextLimit: 32000, speed: 'FAST', intelligence: 9.2 }
+  },
   ...FREE_TIER_MODELS
 ];
 
@@ -90,6 +107,7 @@ export class HanisahKernel {
           
           return tools;
       } 
+      // Universal tools for other providers (Groq, Mistral, OpenAI, etc.)
       return universalTools.functionDeclarations ? [universalTools] : [];
   }
 
@@ -121,13 +139,13 @@ export class HanisahKernel {
     let currentModelId = initialModelId === 'auto-best' ? 'gemini-3-flash-preview' : initialModelId;
 
     // V25 ROBUST FAILOVER CHAIN
-    // If one fails, try the next immediately.
     const plan = [
         currentModelId, 
         'gemini-3-flash-preview', 
         'gemini-3-pro-preview', 
         'llama-3.3-70b-versatile',
-        'gemini-2.0-flash-exp' // Legacy fallback
+        'mistral-medium-latest', // Fallback to Mistral
+        'gemini-2.0-flash-exp'
     ];
     const uniquePlan = [...new Set(plan)];
 
@@ -136,8 +154,6 @@ export class HanisahKernel {
         const modelId = uniquePlan[i];
         const model = MODEL_CATALOG.find(m => m.id === modelId) || MODEL_CATALOG[0];
         
-        // V25: HydraVault Rotation Logic is handled inside getKey. 
-        // We just ask for a key. If it fails inside generateContent, we loop.
         const key = GLOBAL_VAULT.getKey(model.provider as Provider);
 
         if (!key) {
@@ -160,14 +176,6 @@ export class HanisahKernel {
                     temperature: 0.7 
                 };
                 
-                // V25 Deep Search / Thinking Logic
-                if (isThinking) {
-                    // Activate Thinking config for Pro models
-                    // Note: Check API docs if thinkingConfig is available for the specific model
-                    // For V25, we assume 2.0/3.0 Pro supports it.
-                    // config.thinkingConfig = { includeThoughts: true }; 
-                }
-
                 if (activeTools.length > 0) config.tools = activeTools;
 
                 const contents = [
@@ -197,10 +205,10 @@ export class HanisahKernel {
                 
                 if (!hasStarted) throw new Error("Empty Response");
                 this.updateHistory(msg, fullText);
-                return; // Success! Exit the failover loop.
+                return;
 
             } else {
-                // Non-Gemini Providers (Groq, etc.)
+                // Non-Gemini Providers (Groq, Mistral, OpenAI, etc.)
                 const standardHistory = optimizedHistory.map(h => ({
                     role: h.role === 'model' ? 'assistant' : 'user',
                     content: h.parts[0]?.text || ''
@@ -215,27 +223,20 @@ export class HanisahKernel {
                 }
                 if (!hasStarted) throw new Error("Empty Response");
                 this.updateHistory(msg, fullText);
-                return; // Success!
+                return;
             }
         } catch (err: any) {
             const errStr = err.message.toLowerCase();
-            const isQuota = errStr.includes('429') || errStr.includes('limit') || errStr.includes('exhausted') || errStr.includes('quota');
             
-            // Log failure to Vault to trigger cooldown
             GLOBAL_VAULT.reportFailure(model.provider as Provider, key, err);
             
             debugService.log('WARN', 'KERNEL', 'FAILOVER', `${modelId} failed: ${err.message}. Switching...`);
 
             if (i < uniquePlan.length - 1) {
-                // If not the last model, yield a metadata update (not text) so UI knows we are rerouting
                 yield { metadata: { systemStatus: `Rerouting logic to ${uniquePlan[i+1]}...`, isRerouting: true } };
-                
-                // Slight delay to prevent rapid-fire loops
                 await new Promise(resolve => setTimeout(resolve, 800));
                 continue; 
             } else {
-                // V25 NATURAL ERROR RESPONSE (No more ugly bubbles)
-                // If ALL models fail, we return a natural text response from the "System Persona"
                 const naturalError = msg.toLowerCase().includes('gambar') 
                     ? "Waduh, imajinasiku lagi buntu nih (Server Overload). Coba minta lagi bentar lagi ya?"
                     : "Aduh, kepalaku pusing (Network Error). Tunggu sebentar ya sayang, aku istirahat 5 detik dulu...";

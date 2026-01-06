@@ -12,10 +12,24 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const frameIdRef = useRef<number>(0);
 
     useEffect(() => {
         let stream: MediaStream | null = null;
-        let animationFrameId: number;
+        
+        // Native Barcode Detector (Shape Detection API) - Much faster/cooler
+        const BarcodeDetector = (window as any).BarcodeDetector;
+        let detector: any = null;
+        
+        if (BarcodeDetector) {
+            BarcodeDetector.getSupportedFormats()
+                .then((formats: string[]) => {
+                    if (formats.includes('qr_code')) {
+                        detector = new BarcodeDetector({ formats: ['qr_code'] });
+                    }
+                })
+                .catch(console.error);
+        }
 
         const startCamera = async () => {
             try {
@@ -25,7 +39,6 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
                 
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream;
-                    // Tunggu video play agar dimensi asli didapat
                     videoRef.current.setAttribute("playsinline", "true"); 
                     await videoRef.current.play();
                     setLoading(false);
@@ -38,37 +51,54 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
             }
         };
 
-        const scanFrame = () => {
-            if (!videoRef.current || !canvasRef.current) return;
+        const scanFrame = async () => {
+            if (!videoRef.current) return;
             const video = videoRef.current;
-            const canvas = canvasRef.current;
-            const ctx = canvas.getContext('2d');
 
-            if (video.readyState === video.HAVE_ENOUGH_DATA && ctx) {
-                canvas.height = video.videoHeight;
-                canvas.width = video.videoWidth;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                    inversionAttempts: "dontInvert",
-                });
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                // 1. Try Native Detection (Fast & Efficient)
+                if (detector) {
+                    try {
+                        const barcodes = await detector.detect(video);
+                        if (barcodes.length > 0) {
+                            onScan(barcodes[0].rawValue);
+                            return; // Stop loop
+                        }
+                    } catch (e) {
+                        // Fallback to jsQR if native detection fails momentarily
+                    }
+                }
 
-                if (code && code.data) {
-                    // Validasi apakah ini link IStoic yang valid? (Opsional)
-                    // if (code.data.includes("connect=")) ...
-                    onScan(code.data);
-                    return; // Stop scanning after success
+                // 2. Fallback to jsQR (CPU Intensive but reliable)
+                if (canvasRef.current) {
+                    const canvas = canvasRef.current;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+                    if (ctx) {
+                        canvas.height = video.videoHeight;
+                        canvas.width = video.videoWidth;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: "dontInvert",
+                        });
+
+                        if (code && code.data) {
+                            onScan(code.data);
+                            return; // Stop loop
+                        }
+                    }
                 }
             }
-            animationFrameId = requestAnimationFrame(scanFrame);
+            frameIdRef.current = requestAnimationFrame(scanFrame);
         };
 
         startCamera();
 
         return () => {
             if (stream) stream.getTracks().forEach(track => track.stop());
-            cancelAnimationFrame(animationFrameId);
+            if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
         };
     }, [onScan]);
 
@@ -78,7 +108,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose }) => {
             <div className="absolute top-0 left-0 right-0 p-6 z-20 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent">
                 <div>
                     <h2 className="text-emerald-500 font-black text-xl tracking-widest flex items-center gap-2">
-                        <ScanLine size={20} className="animate-pulse"/> SCANNER_V1
+                        <ScanLine size={20} className="animate-pulse"/> SCANNER_V2
                     </h2>
                     <p className="text-[10px] text-white/60 font-mono">ALIGN QR CODE WITHIN FRAME</p>
                 </div>

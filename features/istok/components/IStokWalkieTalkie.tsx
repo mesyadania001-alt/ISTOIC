@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Radio, X, Volume2, Activity, Wifi, Zap } from 'lucide-react';
 import { debugService } from '../../../services/debugService';
@@ -140,12 +139,15 @@ export const IStokWalkieTalkie: React.FC<IStokWalkieTalkieProps> = ({ onClose, o
             playTone(audioCtxRef.current, 'TX_START');
             
             // Ultra-low bitrate for PTT efficiency over 4G
-            // Fallback for browsers that don't support configuring bitrate
+            // Explicit fallback logic for iOS vs Android vs Desktop
             let options = {};
             if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
                 options = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 12000 };
             } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                options = { mimeType: 'audio/mp4', audioBitsPerSecond: 16000 }; // iOS
+                // iOS Safari
+                options = { mimeType: 'audio/mp4', audioBitsPerSecond: 16000 };
+            } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+                options = { mimeType: 'audio/webm' };
             }
             
             mediaRecorderRef.current = new MediaRecorder(stream, options);

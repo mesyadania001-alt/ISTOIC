@@ -1,275 +1,361 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Loader2, Fingerprint, Terminal, AlertTriangle, Lock, ShieldAlert, ScanLine, AlertOctagon, Timer, ScanFace } from 'lucide-react';
-import { verifySystemPin, isSystemPinConfigured } from '../../utils/crypto';
+import { ArrowRight, Loader2, Fingerprint, Lock, ShieldAlert, ScanFace, Chrome, UserPlus, KeyRound, CheckCircle2, RefreshCw } from 'lucide-react';
+import { verifySystemPin, isSystemPinConfigured, setSystemPin } from '../../utils/crypto';
 import { BiometricService } from '../../services/biometricService';
 import useLocalStorage from '../../hooks/useLocalStorage';
+import { IstokIdentityService, IStokUserIdentity } from '../istok/services/istokIdentity';
 
 interface AuthViewProps {
     onAuthSuccess: () => void;
 }
 
+type AuthStage = 'CHECKING' | 'LOGIN_GOOGLE' | 'CREATE_ID' | 'SETUP_PIN' | 'LOCKED' | 'BIOMETRIC_SCAN';
+
 export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
+    // --- GLOBAL STATE ---
+    const [identity, setIdentity] = useLocalStorage<IStokUserIdentity | null>('istok_user_identity', null);
+    const [isPinSet, setIsPinSet] = useState(isSystemPinConfigured());
+    const [bioEnabled, setBioEnabled] = useLocalStorage<boolean>('bio_auth_enabled', false);
+    
+    // --- UI STATE ---
+    const [stage, setStage] = useState<AuthStage>('CHECKING');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [passcode, setPasscode] = useState('');
-    const inputRef = useRef<HTMLInputElement>(null);
     const [shake, setShake] = useState(false);
+    const [bioStatus, setBioStatus] = useState("SCANNING...");
+
+    // --- INPUTS ---
+    const [codename, setCodename] = useState('');
+    const [pinInput, setPinInput] = useState('');
     
-    // Brute Force Protection State
+    // --- LOCKOUT LOGIC ---
     const [attempts, setAttempts] = useState(0);
-    const [isLocked, setIsLocked] = useState(false);
+    const [isHardLocked, setIsHardLocked] = useState(false);
     const [countdown, setCountdown] = useState(0);
 
-    // Biometric State
-    const [isBioEnabled] = useLocalStorage<boolean>('bio_auth_enabled', false);
-    const [isBioAvailable, setIsBioAvailable] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
 
-    const isConfigured = isSystemPinConfigured();
-
+    // --- SMART AUTO FLOW (WHATSAPP STYLE) ---
     useEffect(() => {
-        if (!isLocked && inputRef.current) inputRef.current.focus();
-        
-        if (!isConfigured) {
-            console.error("⚠️ SECURITY ALERT: No Vault PIN configured (Env or Local). Access will be impossible.");
-        }
+        const initFlow = async () => {
+            // 1. Check Identity & PIN
+            const hasId = !!identity;
+            const hasPin = isSystemPinConfigured();
 
-        // Check hardware support
-        BiometricService.isAvailable().then(setIsBioAvailable);
-    }, [isConfigured, isLocked]);
-
-    // Auto-trigger biometric if enabled and available
-    useEffect(() => {
-        if (isBioEnabled && isBioAvailable && !isLocked && !loading) {
-            // Slight delay to allow UI render
-            // setTimeout(handleBiometricLogin, 500); 
-            // Better to let user click to avoid annoyance loops on some browsers
-        }
-    }, [isBioEnabled, isBioAvailable]);
-
-    // Countdown Timer for Lockout
-    useEffect(() => {
-        let timer: ReturnType<typeof setInterval>;
-        if (isLocked && countdown > 0) {
-            timer = setInterval(() => {
-                setCountdown((prev) => prev - 1);
-            }, 1000);
-        } else if (countdown === 0 && isLocked) {
-            setIsLocked(false);
-            setAttempts(0);
-            setError(null);
-        }
-        return () => clearInterval(timer);
-    }, [isLocked, countdown]);
-
-    const handleLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!passcode || isLocked) return;
-        
-        setLoading(true);
-        setError(null);
-
-        // Artificial delay (Timing Attack Mitigation)
-        const delay = Math.floor(Math.random() * 500) + 800; 
-
-        setTimeout(async () => {
-            const isValid = await verifySystemPin(passcode);
-            
-            if (isValid) {
-                onAuthSuccess();
-            } else {
-                const newAttempts = attempts + 1;
-                setAttempts(newAttempts);
-                setPasscode('');
-                setShake(true);
-                setTimeout(() => setShake(false), 500);
-
-                if (newAttempts >= 3) {
-                    setIsLocked(true);
-                    setCountdown(30); // 30 Seconds Lockout
-                    setError("SECURITY_LOCKDOWN: BRUTE_FORCE_DETECTED");
-                } else {
-                    setError(`ACCESS_DENIED: HASH_MISMATCH (${newAttempts}/3)`);
-                }
+            if (!hasId) {
+                setStage('LOGIN_GOOGLE');
+                return;
             }
-            setLoading(false);
-        }, delay);
-    };
 
-    const handleBiometricLogin = async () => {
-        if (isLocked) return;
-        setLoading(true);
-        setError(null);
-        
+            if (!hasPin) {
+                setStage('SETUP_PIN');
+                return;
+            }
+
+            // 2. If Locked, check Biometrics immediately
+            if (bioEnabled) {
+                setStage('BIOMETRIC_SCAN');
+                handleBiometricScan();
+            } else {
+                setStage('LOCKED');
+            }
+        };
+
+        initFlow();
+    }, [identity]);
+
+    // Focus Helper
+    useEffect(() => {
+        if (stage === 'LOCKED' && !isHardLocked && inputRef.current) {
+            setTimeout(() => inputRef.current?.focus(), 100);
+        }
+    }, [stage, isHardLocked]);
+
+    // --- BIOMETRIC HANDLER ---
+    const handleBiometricScan = async () => {
+        setBioStatus("SCANNING FACE ID...");
         try {
             const success = await BiometricService.authenticate();
             if (success) {
-                onAuthSuccess();
+                setBioStatus("AUTHORIZED");
+                setTimeout(onAuthSuccess, 500); // Smooth transition
             } else {
-                // Don't count bio fails against PIN attempts usually, but we can log it
-                setError("BIOMETRIC_MISMATCH");
+                setBioStatus("FAILED");
+                setTimeout(() => setStage('LOCKED'), 800); // Fallback to PIN
             }
         } catch (e) {
-            setError("BIOMETRIC_ERROR");
-        } finally {
-            setLoading(false);
+            setBioStatus("ERROR");
+            setTimeout(() => setStage('LOCKED'), 800);
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-[9999] bg-[#020202] flex items-center justify-center p-4 overflow-hidden font-sans select-none">
-            {/* Security Grid Background */}
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(0,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
+    // --- GOOGLE LOGIN ---
+    const handleGoogleLogin = async () => {
+        setLoading(true);
+        const userProfile = await IstokIdentityService.loginWithGoogle();
+        
+        if (userProfile) {
+            // Jika user sudah punya ID di DB, simpan dan lanjut
+            if (userProfile.istokId) {
+                setIdentity(userProfile);
+                // Check PIN next
+                if (isSystemPinConfigured()) {
+                    onAuthSuccess(); // Fast path for existing users
+                } else {
+                    setStage('SETUP_PIN');
+                }
+            } else {
+                // User baru -> Setup ID
+                setStage('CREATE_ID');
+                (window as any).tempGoogleUser = userProfile;
+            }
+        }
+        setLoading(false);
+    };
+
+    // --- CREATE ID (FIRST TIME) ---
+    const handleCreateIdentity = async () => {
+        if (codename.length < 3) {
+            setError("MINIMUM 3 CHARS");
+            setShake(true); setTimeout(() => setShake(false), 500);
+            return;
+        }
+
+        const googleUser = (window as any).tempGoogleUser;
+        const finalId = IstokIdentityService.formatId(codename);
+        
+        const newIdentity: IStokUserIdentity = {
+            ...googleUser,
+            codename: codename.toUpperCase(),
+            istokId: finalId
+        };
+
+        setLoading(true);
+        // Save to Firestore
+        await IstokIdentityService.createProfile(newIdentity);
+        setIdentity(newIdentity);
+        setLoading(false);
+        setStage('SETUP_PIN');
+    };
+
+    // --- SETUP PIN ---
+    const handleSetupPin = async () => {
+        if (pinInput.length < 4) {
+            setError("PIN MIN 4 DIGITS"); return;
+        }
+        
+        await setSystemPin(pinInput);
+        setIsPinSet(true);
+        
+        // Offer Biometrics after PIN setup
+        if (await BiometricService.isAvailable()) {
+             if (confirm("Aktifkan Face ID / Fingerprint untuk akses cepat?")) {
+                 try {
+                     const res = await BiometricService.register(identity?.codename || 'User');
+                     if (res) setBioEnabled(true);
+                 } catch (e) { console.error(e); }
+             }
+        }
+        
+        onAuthSuccess();
+    };
+
+    // --- UNLOCK (PIN FALLBACK) ---
+    const handleUnlock = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (isHardLocked) return;
+        
+        setLoading(true);
+        // Artificial delay for security feel & brute force prevention
+        await new Promise(r => setTimeout(r, 600));
+        
+        const isValid = await verifySystemPin(pinInput);
+        if (isValid) {
+            onAuthSuccess();
+        } else {
+            setAttempts(p => p + 1);
+            setError("INVALID PASSCODE");
+            setPinInput('');
+            setShake(true); setTimeout(() => setShake(false), 500);
             
-            {/* Ambient Glow */}
-            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vh] ${isLocked ? 'bg-red-900/10' : 'bg-accent/5'} blur-[120px] rounded-full pointer-events-none animate-pulse-slow transition-colors duration-1000`}></div>
+            if (attempts >= 3) {
+                setIsHardLocked(true);
+                setCountdown(30);
+                const interval = setInterval(() => {
+                    setCountdown(prev => {
+                        if (prev <= 1) {
+                            clearInterval(interval);
+                            setIsHardLocked(false);
+                            setAttempts(0);
+                            return 0;
+                        }
+                        return prev - 1;
+                    });
+                }, 1000);
+            }
+        }
+        setLoading(false);
+    };
+
+    // --- RENDERERS ---
+
+    if (stage === 'CHECKING') return <div className="h-screen bg-black" />; // Splash
+
+    if (stage === 'BIOMETRIC_SCAN') {
+        return (
+            <div className="fixed inset-0 z-[9999] bg-[#000000] flex flex-col items-center justify-center animate-fade-in text-emerald-500">
+                <div className="relative mb-8">
+                    <ScanFace size={64} strokeWidth={1} className="animate-pulse" />
+                    <div className="absolute inset-0 border-4 border-emerald-500/20 rounded-full animate-[spin_3s_linear_infinite] w-full h-full scale-150 border-t-emerald-500"></div>
+                </div>
+                <h2 className="text-xl font-black tracking-widest uppercase">{bioStatus}</h2>
+                <button 
+                    onClick={() => setStage('LOCKED')} 
+                    className="mt-8 text-neutral-500 text-xs font-mono hover:text-white"
+                >
+                    USE PIN
+                </button>
+            </div>
+        );
+    }
+
+    // LOGIN & ONBOARDING
+    return (
+        <div className="fixed inset-0 z-[9999] bg-[#020202] flex items-center justify-center p-6 overflow-hidden font-sans select-none">
+            {/* Background FX */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(0,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vh] bg-emerald-500/5 blur-[120px] rounded-full pointer-events-none"></div>
 
             <div className={`relative w-full max-w-sm ${shake ? 'animate-[shake_0.5s_cubic-bezier(.36,.07,.19,.97)_both]' : ''}`}>
-                
-                {/* Secure Enclave Container */}
-                <div className={`
-                    backdrop-blur-2xl border rounded-[32px] p-8 shadow-[0_0_80px_-20px_rgba(0,0,0,0.8)] relative overflow-hidden group transition-all duration-500
-                    ${isLocked 
-                        ? 'bg-red-950/20 border-red-500/30 shadow-[0_0_50px_rgba(239,68,68,0.1)]' 
-                        : 'bg-[#0a0a0b]/90 border-white/10 hover:border-accent/30'
-                    }
-                `}>
+                <div className="backdrop-blur-2xl border border-white/10 bg-[#0a0a0b]/80 rounded-[32px] p-8 shadow-2xl relative overflow-hidden">
                     
-                    {/* Header Icon */}
-                    <div className="flex justify-center mb-8 relative">
-                        <div className={`
-                            w-24 h-24 rounded-[32px] flex items-center justify-center relative overflow-hidden transition-all duration-500
-                            ${isLocked 
-                                ? 'bg-red-500/10 border border-red-500/30' 
-                                : 'bg-white/5 border border-white/10 group-hover:shadow-[0_0_30px_var(--accent-glow)]'
-                            }
-                        `}>
-                            <div className={`absolute inset-0 animate-pulse ${isLocked ? 'bg-red-500/10' : 'bg-accent/10'}`}></div>
-                            {loading ? (
-                                <Loader2 size={40} className="text-accent animate-spin relative z-10" />
-                            ) : isLocked ? (
-                                <AlertOctagon size={40} className="text-red-500 relative z-10 animate-pulse" strokeWidth={1.5} />
-                            ) : (
-                                <Fingerprint size={40} className={`text-accent relative z-10 transition-transform duration-500 ${error ? 'text-red-500' : ''}`} strokeWidth={1.5} />
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="text-center mb-8 space-y-2">
-                        <h1 className={`text-2xl font-black italic tracking-tighter uppercase leading-none ${isLocked ? 'text-red-500 animate-pulse' : 'text-white'}`}>
-                            {isLocked ? 'SYSTEM LOCKDOWN' : <>SYSTEM <span className="text-accent">LOGIN</span></>}
-                        </h1>
-                        <div className="flex items-center justify-center gap-2 text-neutral-500">
-                            <Terminal size={10} />
-                            <p className="text-[9px] tech-mono font-bold uppercase tracking-[0.3em]">
-                                {isLocked ? `RETRY_IN_${countdown}S` : 'PERSONAL_OS_V15'}
-                            </p>
-                        </div>
-                    </div>
-
-                    {!isConfigured ? (
-                         <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-2xl flex flex-col items-center text-center gap-3 animate-pulse mb-6">
-                            <ShieldAlert size={24} className="text-red-500" />
-                            <div>
-                                <h3 className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">CONFIGURATION_VOID</h3>
-                                <p className="text-[9px] text-red-400 font-mono leading-relaxed">
-                                    System PIN hash is missing.<br/>Configure VITE_VAULT_PIN_HASH in .env
+                    {/* 1. GOOGLE LOGIN */}
+                    {stage === 'LOGIN_GOOGLE' && (
+                        <div className="text-center space-y-8 animate-slide-up">
+                            <div className="space-y-2">
+                                <h1 className="text-3xl font-black text-white italic tracking-tighter uppercase">
+                                    ISTOIC <span className="text-emerald-500">TITANIUM</span>
+                                </h1>
+                                <p className="text-[10px] font-mono text-neutral-500 uppercase tracking-[0.3em]">
+                                    SECURE COGNITIVE OS
                                 </p>
                             </div>
-                         </div>
-                    ) : (
-                        <div className="space-y-6">
-                            {isLocked ? (
-                                <div className="p-6 bg-red-500/5 rounded-2xl border border-red-500/20 flex flex-col items-center gap-3 text-center">
-                                    <Timer size={32} className="text-red-500 animate-spin-slow" />
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-red-500">
-                                        SECURITY PROTOCOL ACTIVATED
-                                    </p>
-                                    <p className="text-[20px] font-mono font-bold text-white">
-                                        00:{countdown.toString().padStart(2, '0')}
-                                    </p>
-                                </div>
-                            ) : (
-                                <form onSubmit={handleLogin} className="space-y-6">
-                                    <div className="space-y-2 relative group/input">
-                                        <label className="text-[8px] tech-mono font-black text-neutral-500 uppercase tracking-widest pl-2 flex items-center gap-2 mb-2">
-                                            <Lock size={10} /> ACCESS_CODE
-                                        </label>
-                                        <div className="relative">
-                                            <input 
-                                                ref={inputRef}
-                                                type="password" 
-                                                value={passcode}
-                                                onChange={e => { setPasscode(e.target.value); setError(null); }}
-                                                className={`
-                                                    w-full bg-[#050505] border rounded-2xl py-5 px-6 text-center text-2xl font-black text-white tracking-[0.5em] 
-                                                    focus:outline-none transition-all placeholder:text-neutral-800
-                                                    ${error 
-                                                        ? 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' 
-                                                        : 'border-white/10 focus:border-accent/50 focus:shadow-[0_0_30px_rgba(var(--accent-rgb),0.15)]'
-                                                    }
-                                                `}
-                                                placeholder="••••••"
-                                                autoComplete="off"
-                                                disabled={loading}
-                                                maxLength={6}
-                                                inputMode="numeric"
-                                            />
-                                            {passcode.length > 0 && !loading && (
-                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-mono text-neutral-600">
-                                                    {passcode.length}/6
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {error && (
-                                        <div className="flex items-center justify-center gap-2 text-red-500 animate-fade-in">
-                                            <AlertTriangle size={12} />
-                                            <span className="text-[9px] font-bold uppercase tracking-widest">{error}</span>
-                                        </div>
-                                    )}
-
-                                    <div className="flex gap-3">
-                                        <button 
-                                            type="submit" 
-                                            disabled={loading || passcode.length < 4} 
-                                            className="flex-1 py-5 bg-white text-black hover:bg-accent hover:text-black rounded-2xl font-black uppercase text-[10px] tracking-[0.3em] flex items-center justify-center gap-3 transition-all shadow-lg hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed group/btn"
-                                        >
-                                            {loading ? (
-                                                <span className="flex items-center gap-2">
-                                                    VERIFYING <Loader2 className="animate-spin" size={14} />
-                                                </span>
-                                            ) : (
-                                                <>MASUK <ArrowRight size={14} className="group-hover/btn:translate-x-1 transition-transform" /></>
-                                            )}
-                                        </button>
-
-                                        {isBioEnabled && isBioAvailable && (
-                                            <button 
-                                                type="button"
-                                                onClick={handleBiometricLogin}
-                                                disabled={loading}
-                                                className="w-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-accent hover:bg-white/10 hover:border-accent/50 transition-all active:scale-95"
-                                                title="Biometric Login"
-                                            >
-                                                <ScanFace size={24} />
-                                            </button>
-                                        )}
-                                    </div>
-                                </form>
-                            )}
+                            <button 
+                                onClick={handleGoogleLogin}
+                                disabled={loading}
+                                className="w-full py-4 bg-white text-black hover:bg-neutral-200 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+                            >
+                                {loading ? <Loader2 size={18} className="animate-spin"/> : <Chrome size={18} />}
+                                ACCESS WITH GOOGLE
+                            </button>
+                            <div className="flex items-center justify-center gap-2 text-[9px] text-emerald-500/60 font-mono">
+                                <ShieldAlert size={12} /> CLOUD ENCRYPTED IDENTITY
+                            </div>
                         </div>
                     )}
 
-                    <div className="mt-8 pt-6 border-t border-white/5 flex justify-between items-center opacity-50">
-                        <div className="flex items-center gap-1.5">
-                            <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isLocked ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                            <span className="text-[7px] text-neutral-400 font-mono tracking-widest">
-                                {isLocked ? 'THREAT_DETECTED' : 'SYSTEM_ONLINE'}
-                            </span>
+                    {/* 2. CREATE ID (Only New Users) */}
+                    {stage === 'CREATE_ID' && (
+                        <div className="space-y-6 animate-slide-up">
+                             <div className="text-center">
+                                 <h2 className="text-xl font-bold text-white uppercase tracking-tight">Create Callsign</h2>
+                                 <p className="text-xs text-neutral-500 mt-2">Identifier unik ini akan disinkronisasi ke cloud.</p>
+                             </div>
+                             <div className="bg-[#121214] border border-white/10 rounded-2xl px-4 py-4 focus-within:border-emerald-500 transition-all flex items-center">
+                                <span className="text-emerald-500 font-black text-sm mr-1 select-none">ISTOIC-</span>
+                                <input 
+                                    value={codename}
+                                    onChange={e => setCodename(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())}
+                                    className="bg-transparent border-none outline-none text-white font-bold text-lg w-full uppercase"
+                                    placeholder="BARISTA"
+                                    maxLength={12}
+                                />
+                             </div>
+                             <button onClick={handleCreateIdentity} disabled={loading} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2">
+                                {loading ? <Loader2 className="animate-spin"/> : <ArrowRight />} LANJUT
+                             </button>
                         </div>
-                        <ScanLine size={12} className="text-neutral-600" />
-                    </div>
+                    )}
+
+                    {/* 3. SETUP PIN */}
+                    {stage === 'SETUP_PIN' && (
+                        <div className="space-y-6 animate-slide-up text-center">
+                            <div className="w-16 h-16 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto border border-amber-500/20 mb-4">
+                                <KeyRound size={28} />
+                            </div>
+                            <h2 className="text-xl font-bold text-white uppercase">Kunci Perangkat</h2>
+                            <p className="text-xs text-neutral-500">PIN ini hanya tersimpan di perangkat ini untuk enkripsi lokal.</p>
+                            <input 
+                                type="password" inputMode="numeric" value={pinInput}
+                                onChange={e => setPinInput(e.target.value.slice(0,6))}
+                                className="w-full bg-[#121214] border border-white/10 rounded-2xl py-5 text-center text-3xl font-black text-white tracking-[0.5em] focus:border-amber-500 outline-none"
+                                placeholder="••••"
+                            />
+                            <button onClick={handleSetupPin} className="w-full py-4 bg-amber-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest">
+                                SET PASSCODE
+                            </button>
+                        </div>
+                    )}
+
+                    {/* 4. LOCKED / PIN ENTRY */}
+                    {stage === 'LOCKED' && (
+                        <form onSubmit={handleUnlock} className="space-y-6 animate-slide-up">
+                            <div className="text-center space-y-2 mb-8">
+                                <div className={`w-20 h-20 rounded-3xl mx-auto flex items-center justify-center mb-4 transition-all duration-500 ${isHardLocked ? 'bg-red-500/20 text-red-500' : 'bg-emerald-500/10 text-emerald-500 shadow-[0_0_40px_-10px_rgba(16,185,129,0.3)]'}`}>
+                                    {isHardLocked ? <Lock size={32} /> : <Fingerprint size={32} />}
+                                </div>
+                                <h2 className="text-xl font-bold text-white uppercase tracking-tight">
+                                    {identity?.displayName || 'OPERATOR'}
+                                </h2>
+                                <p className="text-[10px] font-mono text-emerald-500 tracking-wider">
+                                    {identity?.istokId}
+                                </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                {isHardLocked ? (
+                                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
+                                        <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">SYSTEM_LOCKED</p>
+                                        <p className="text-2xl font-mono text-white font-bold">00:{countdown.toString().padStart(2,'0')}</p>
+                                    </div>
+                                ) : (
+                                    <input 
+                                        ref={inputRef}
+                                        type="password"
+                                        inputMode="numeric"
+                                        value={pinInput}
+                                        onChange={e => { setPinInput(e.target.value.slice(0,6)); setError(null); }}
+                                        className={`w-full bg-[#121214] border rounded-2xl py-5 text-center text-3xl font-black text-white tracking-[0.5em] focus:outline-none transition-all placeholder:text-neutral-800 ${error ? 'border-red-500/50' : 'border-white/10 focus:border-emerald-500'}`}
+                                        placeholder="••••••"
+                                        disabled={loading}
+                                    />
+                                )}
+                                {error && !isHardLocked && <p className="text-center text-[10px] text-red-500 font-bold tracking-widest">{error}</p>}
+                            </div>
+
+                            {!isHardLocked && (
+                                <div className="space-y-3">
+                                    <button 
+                                        type="submit"
+                                        disabled={loading || pinInput.length < 4}
+                                        className="w-full py-4 bg-white text-black hover:bg-neutral-200 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+                                    >
+                                        {loading ? <Loader2 className="animate-spin"/> : <ArrowRight />} BUKA
+                                    </button>
+                                    {bioEnabled && (
+                                        <button 
+                                            type="button" 
+                                            onClick={handleBiometricScan}
+                                            className="w-full py-3 text-emerald-500 text-[10px] font-bold tracking-widest hover:text-white transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <ScanFace size={14}/> USE FACE ID
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </form>
+                    )}
+
                 </div>
             </div>
         </div>

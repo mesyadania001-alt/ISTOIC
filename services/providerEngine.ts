@@ -82,6 +82,7 @@ const getSecureEndpoint = (provider: string): string => {
         case 'OPENAI': return SECURITY_MATRIX.synthesizeEndpoint([104,116,116,112,115,58,47,47,97,112,105,46,111,112,101,110,97,105,46,99,111,109,47,118,49,47,99,104,97,116,47,99,111,109,112,108,101,116,105,111,110,115]);
         case 'XAI': return SECURITY_MATRIX.synthesizeEndpoint([104,116,116,112,115,58,47,47,97,112,105,46,120,46,97,105,47,118,49,47,99,104,97,116,47,99,111,109,112,108,101,116,105,111,110,115]);
         case 'OPENROUTER': return SECURITY_MATRIX.synthesizeEndpoint([104,116,116,112,115,58,47,47,111,112,101,110,114,111,117,116,101,114,46,97,105,47,97,112,105,47,118,49,47,99,104,97,116,47,99,111,109,112,108,101,116,105,111,110,115]);
+        // https://api.mistral.ai/v1/chat/completions
         case 'MISTRAL': return SECURITY_MATRIX.synthesizeEndpoint([104,116,116,112,115,58,47,47,97,112,105,46,109,105,115,116,114,97,108,46,97,105,47,118,49,47,99,104,97,116,47,99,111,109,112,108,101,116,105,111,110,115]);
         default: return '';
     }
@@ -131,6 +132,8 @@ export async function* streamOpenAICompatible(
         max_tokens: 4096
     };
 
+    // Mistral has strict tool requirements, safer to disable tools if not explicitly compatible
+    // But basic OpenAI tool schema should work for function calling models
     if (modelId !== 'deepseek-reasoner' && tools && tools.length > 0) {
         const compatibleTools = convertToolsToOpenAI(tools);
         if (compatibleTools) {
@@ -270,7 +273,8 @@ export async function analyzeMultiModalMedia(provider: string, modelId: string, 
         }
     }
 
-    if (['GROQ', 'OPENAI', 'OPENROUTER'].includes(provider)) {
+    if (['GROQ', 'OPENAI', 'OPENROUTER', 'MISTRAL'].includes(provider)) {
+        // Mistral also supports vision via pixtral, reuse generic vision endpoint logic if model supports it
         const endpoint = getVisionEndpoint(provider);
         const headers: any = {
             'Content-Type': 'application/json',
@@ -311,6 +315,7 @@ export async function analyzeMultiModalMedia(provider: string, modelId: string, 
     return `Provider ${provider} does not support visual analysis in this kernel.`;
 }
 
+// ... existing code for generateMultiModalImage (unchanged)
 export async function generateMultiModalImage(provider: string, modelId: string, prompt: string, options: any): Promise<string> {
     const { GoogleGenAI } = await import("@google/genai");
     const apiKey = KEY_MANAGER.getKey(provider);

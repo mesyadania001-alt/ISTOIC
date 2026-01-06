@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { MobileNav } from './components/MobileNav';
@@ -261,8 +260,10 @@ const App: React.FC = () => {
 
             if (connectId) {
                 console.log("[HYDRA-LINK] Incoming P2P Connection Detected. Switching Mode.");
-                // Note: In a real app, you might want to force Auth first if security is strict.
-                // For "Seamless" experience requested, we switch to ISTOK which handles its own auth flow/scanner.
+                // We could prompt user to login first if strict security is needed, but assuming user wants to jump in.
+                // However, without IDENTITY, IStokView might complain.
+                // Best practice: Go to Auth, then redirect? 
+                // For simplicity: Go to ISTOK, IStokView handles its own checks/identity if missing.
                 setSessionMode('ISTOK');
             }
         };

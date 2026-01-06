@@ -26,12 +26,6 @@ const downloadBase64 = (base64: string, filename: string) => {
 
 // --- UTILS: HIGH-PERFORMANCE IMAGE COMPRESSION V2 ---
 
-/**
- * Compresses image to WebP format with smart sizing.
- * - Skips compression if file is already efficient.
- * - Enforces max bounds for P2P stability.
- * - Strips EXIF metadata for privacy.
- */
 export const compressImage = (file: File): Promise<{base64: string, size: number, width: number, height: number, mimeType: string}> => {
     return new Promise((resolve, reject) => {
         // If file is already small (< 150KB) and is an image, convert to base64 directly to preserve original quality
@@ -59,8 +53,7 @@ export const compressImage = (file: File): Promise<{base64: string, size: number
         const objectUrl = URL.createObjectURL(file);
         
         img.onload = () => {
-            // 1. Smart Dimension Calculation
-            const MAX_DIM = 1024; // Increased from 800 for better Retina display support
+            const MAX_DIM = 1024;
             let width = img.width;
             let height = img.height;
 
@@ -76,7 +69,6 @@ export const compressImage = (file: File): Promise<{base64: string, size: number
                 }
             }
 
-            // 2. Canvas Processing
             const canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;
@@ -88,21 +80,17 @@ export const compressImage = (file: File): Promise<{base64: string, size: number
                 return;
             }
 
-            // High Quality Scaling
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, width, height);
             
             URL.revokeObjectURL(objectUrl);
 
-            // 3. Compression (Adaptive)
-            // Use WebP if available, fallback to JPEG
             const mimeType = 'image/webp';
-            const quality = 0.75; // Balanced for P2P
+            const quality = 0.75;
 
             const base64 = canvas.toDataURL(mimeType, quality);
             
-            // Calculate size
             const head = `data:${mimeType};base64,`;
             const size = Math.round((base64.length - head.length) * 3 / 4);
 
@@ -132,12 +120,33 @@ export const ImageMessage = React.memo(({ content, size, mimeType, onClick, onRe
     const [status, setStatus] = useState<'LOADING' | 'LOADED' | 'ERROR'>('LOADING');
     const [isRevealed, setIsRevealed] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
+    const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
+    // Optimized: Convert Base64 to Blob URL for rendering
+    // This dramatically reduces DOM memory usage vs embedding huge Base64 strings in `src`
     useEffect(() => {
-        const img = new Image();
-        img.src = content;
-        img.onload = () => setStatus('LOADED');
-        img.onerror = () => setStatus('ERROR');
+        let active = true;
+        
+        const processImage = async () => {
+            try {
+                const res = await fetch(content);
+                const blob = await res.blob();
+                if (active) {
+                    const url = URL.createObjectURL(blob);
+                    setBlobUrl(url);
+                    setStatus('LOADED');
+                }
+            } catch (e) {
+                if (active) setStatus('ERROR');
+            }
+        };
+
+        processImage();
+
+        return () => {
+            active = false;
+            if (blobUrl) URL.revokeObjectURL(blobUrl);
+        };
     }, [content]);
 
     const handleReveal = (e: React.MouseEvent) => {
@@ -196,16 +205,18 @@ export const ImageMessage = React.memo(({ content, size, mimeType, onClick, onRe
 
             {/* 3. IMAGE CONTENT */}
             <div className="relative w-full h-full min-h-[150px]">
-                <img 
-                    src={content} 
-                    alt="Secure Content" 
-                    className={`
-                        w-full h-auto max-h-[400px] object-cover transition-all duration-700 block
-                        ${isRevealed ? 'filter-none scale-100' : 'blur-xl scale-110 grayscale'}
-                        ${status === 'LOADED' ? 'opacity-100' : 'opacity-0'}
-                    `}
-                    loading="lazy"
-                />
+                {blobUrl && (
+                    <img 
+                        src={blobUrl} 
+                        alt="Secure Content" 
+                        className={`
+                            w-full h-auto max-h-[400px] object-cover transition-all duration-700 block
+                            ${isRevealed ? 'filter-none scale-100' : 'blur-xl scale-110 grayscale'}
+                            ${status === 'LOADED' ? 'opacity-100' : 'opacity-0'}
+                        `}
+                        loading="lazy"
+                    />
+                )}
 
                 {/* SECURITY / PRIVACY SHIELD */}
                 {!isRevealed && status === 'LOADED' && (

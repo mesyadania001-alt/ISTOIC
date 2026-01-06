@@ -9,7 +9,6 @@ import { MODEL_CATALOG } from '../../../services/melsaKernel';
 import { KEY_MANAGER, type ProviderStatus } from '../../../services/geminiService';
 import { useFeatures } from '../../../contexts/FeatureContext'; 
 
-// ... (props and components same as before)
 interface ModelPickerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -112,7 +111,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   activeModelId,
   onSelectModel
 }) => {
-  const [activeTab, setActiveTab] = useState<'AUTO' | 'GOOGLE' | 'OPENAI' | 'GROQ' | 'DEEPSEEK'>('AUTO');
+  const [activeTab, setActiveTab] = useState<'AUTO' | 'GOOGLE' | 'OPENAI' | 'GROQ' | 'DEEPSEEK' | 'MISTRAL'>('AUTO');
   const [statuses, setStatuses] = useState<ProviderStatus[]>([]);
   const { features } = useFeatures(); 
   const [visibleTabs, setVisibleTabs] = useState<string[]>([]);
@@ -132,6 +131,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
 
           const tabsToShow = ['AUTO'];
           if (isVisible('GEMINI')) tabsToShow.push('GOOGLE');
+          if (isVisible('MISTRAL')) tabsToShow.push('MISTRAL');
           if (isVisible('GROQ')) tabsToShow.push('GROQ');
           if (isVisible('OPENAI')) tabsToShow.push('OPENAI');
           if (isVisible('DEEPSEEK')) tabsToShow.push('DEEPSEEK');
@@ -175,6 +175,16 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
         bg: 'bg-blue-500/10',
         border: 'border-blue-500/20',
         models: MODEL_CATALOG.filter(m => m.provider === 'GEMINI' && m.id !== 'auto-best') 
+    },
+    'MISTRAL': { 
+        icon: <Wind size={16}/>, 
+        label: 'MISTRAL', 
+        sub: 'FRENCH AI',
+        desc: 'Top-tier open weights models from France.',
+        accent: 'text-yellow-400',
+        bg: 'bg-yellow-500/10',
+        border: 'border-yellow-500/20',
+        models: MODEL_CATALOG.filter(m => m.provider === 'MISTRAL') 
     },
     'GROQ': { 
         icon: <Zap size={16}/>, 
@@ -342,7 +352,6 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   );
 };
 
-// ArchitectureCard component remains same
 const ArchitectureCard: React.FC<{ 
     model: any, 
     isActive: boolean, 
