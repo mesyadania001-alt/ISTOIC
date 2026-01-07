@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { STOIC_KERNEL as SK } from '../../../services/stoicKernel';
@@ -86,10 +85,11 @@ export const useAIStream = ({
             const persona = activeThread.persona || 'stoic';
             const kernel = persona === 'hanisah' ? HK : SK;
             
+            // Fix: Pass original 'notes' array instead of string 'noteContext'
             const stream = kernel.streamExecute(
                 userMsg || "Proceed with attachment analysis.", 
                 activeModel.id, 
-                noteContext, 
+                notes, 
                 attachment,
                 { signal } 
             );
@@ -161,8 +161,8 @@ export const useAIStream = ({
              }
              // Append error to whatever text we got
              storage.updateMessage(targetId, modelMessageId, { 
-                 text: (prev: any) => (prev.text || '') + errorText, // functional update simulation logic handled in store
-                 metadata: { status: 'success' } // Mark as success so it renders, just with error text
+                 text: (prev: any) => (prev.text || '') + errorText, 
+                 metadata: { status: 'success' } 
              });
         } finally {
             setIsLoading(false);

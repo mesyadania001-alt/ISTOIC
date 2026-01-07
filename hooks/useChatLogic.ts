@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import useLocalStorage from '../../../hooks/useLocalStorage';
@@ -167,7 +166,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             
             setThreads(prev => prev.map(t => t.id === targetId ? {
                 ...t,
-                messages: t.messages.map(m => m.id === modelMsgId ? {
+                messages: t.messages.map(m => m.id === modelMessageId ? {
                     ...m,
                     text: `Here is your creation based on "${promptText}":\n\n![Generated Image](${result.url})\n\n_Engine: ${result.model.toUpperCase()}_`
                 } : m)
@@ -175,7 +174,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         } catch (e) {
             setThreads(prev => prev.map(t => t.id === targetId ? {
                 ...t,
-                messages: t.messages.map(m => m.id === modelMsgId ? {
+                messages: t.messages.map(m => m.id === modelMessageId ? {
                     ...m,
                     text: `⚠️ **GENERATION FAILED**: ${(e as any).message}`
                 } : m)
@@ -234,36 +233,13 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         const signal = controller.signal;
 
         try {
-            let noteContext = "";
-            let memoryContext = "";
-
-            // V20: Enhanced Context Injection
-            if (isVaultUnlocked && vaultEnabled) {
-                // 1. RECALL LONG-TERM MEMORY
-                if (userMsg.length > 3) {
-                    memoryContext = await MemoryService.recall(userMsg, notesRef.current);
-                }
-
-                // 2. LOAD VAULT INDEX (Recent Notes)
-                const recentNotes = notesRef.current
-                    .filter(n => !n.is_archived)
-                    .slice(0, 30) // Limit context
-                    .map(n => `${n.title} [${n.tags?.join(',') || ''}] (ID:${n.id})`);
-                
-                noteContext = `
-${memoryContext}
-
-[VAULT_INDEX_SNAPSHOT]
-${recentNotes.join(' | ')}
-`;
-            }
-
             const kernel = personaMode === 'hanisah' ? HANISAH_KERNEL : STOIC_KERNEL;
             
+            // Fix: Pass original 'notesRef.current' array instead of string context for internal RAG processing
             const stream = kernel.streamExecute(
                 userMsg || "Proceed with attachment analysis.", 
                 activeModel.id, 
-                noteContext, 
+                notesRef.current, 
                 attachment,
                 { signal } 
             );
@@ -288,7 +264,7 @@ ${recentNotes.join(' | ')}
 
                     accumulatedText += `\n\n> ⚙️ **EXECUTING:** ${toolName.replace(/_/g, ' ').toUpperCase()}...\n`;
                     try {
-                        const toolResult = await executeNeuralTool(chunk.functionCall, notes, setNotes, imageModelId);
+                        const toolResult = await executeNeuralTool(chunk.functionCall, notesRef.current, setNotes, imageModelId);
                         if (toolResult.includes('![Generated Visual]') || toolResult.trim().startsWith('![')) {
                              accumulatedText += `\n\n${toolResult}\n\n`;
                         } else {

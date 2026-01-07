@@ -117,7 +117,8 @@ export const SystemHealthView: React.FC = () => {
             
             const prompt = `[ROLE: HANISAH_SYSTEM_MECHANIC]\nAnalisa data telemetri (CPU, RAM, Latency).\nBerikan laporan performa sistem gaya Cyberpunk.\n\n[RAW_DATA]\n${toolResultJson}\n\nFORMAT:\n1. **SYSTEM INTEGRITY**: (SCORE %)\n2. **METRICS SUMMARY**: (CPU/Mem/Net Status)\n3. **ANOMALIES**: (List - be specific)\n4. **OPTIMIZATION**: (Actionable steps)`;
             
-            const response = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview', "System Diagnostic Context");
+            // Fix: Pass empty array for contextNotes (3rd arg) to satisfy Note[] type
+            const response = await HANISAH_KERNEL.execute(prompt, 'gemini-3-flash-preview', []);
             setHanisahDiagnosis(response.text || "Diagnostic matrix failed to render.");
             debugService.log('INFO', 'MECHANIC', 'SCAN_COMPLETE', 'Diagnosis generated successfully.');
         } catch (e: any) {
@@ -401,7 +402,7 @@ export const SystemHealthView: React.FC = () => {
                                 <button 
                                     onClick={toggleStreamFreeze} 
                                     className={`p-1.5 rounded border transition-all ${isStreamFrozen ? 'bg-amber-500/20 border-amber-500 text-amber-500' : 'border-white/10 text-neutral-500 hover:text-white'}`}
-                                    title={isStreamFrozen ? "Resume Stream" : "Freeze Stream"}
+                                    title={isFrozen ? "Resume Stream" : "Pause Stream"}
                                 >
                                     {isStreamFrozen ? <Play size={10} fill="currentColor"/> : <Pause size={10} />}
                                 </button>
