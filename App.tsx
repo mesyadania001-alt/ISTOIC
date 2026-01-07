@@ -260,10 +260,6 @@ const App: React.FC = () => {
 
             if (connectId) {
                 console.log("[HYDRA-LINK] Incoming P2P Connection Detected. Switching Mode.");
-                // We could prompt user to login first if strict security is needed, but assuming user wants to jump in.
-                // However, without IDENTITY, IStokView might complain.
-                // Best practice: Go to Auth, then redirect? 
-                // For simplicity: Go to ISTOK, IStokView handles its own checks/identity if missing.
                 setSessionMode('ISTOK');
             }
         };
@@ -293,7 +289,7 @@ const App: React.FC = () => {
         return (
             <Suspense fallback={<div className="h-screen w-screen bg-black flex items-center justify-center text-red-500 font-mono">INITIALIZING_SECURE_LAYER...</div>}>
                 <ErrorBoundary viewName="ISTOK_SECURE_CHANNEL">
-                    <IStokView />
+                    <IStokView onLogout={() => setSessionMode('AUTH')} />
                 </ErrorBoundary>
             </Suspense>
         );

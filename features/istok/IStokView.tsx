@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     encryptData, decryptData
 } from '../../utils/crypto'; 
@@ -7,16 +7,16 @@ import { TeleponanView } from '../teleponan/TeleponanView';
 import { activatePrivacyShield } from '../../utils/privacyShield';
 import { 
     Send, Zap, ScanLine, Server, X,
-    Mic, Menu, PhoneCall, 
+    Mic, PhoneCall, 
     QrCode, Lock, Flame, 
     ShieldAlert, ArrowLeft, BrainCircuit, Sparkles,
     Wifi, Radio, Paperclip, Check,
-    User, Image as ImageIcon, FileText, Download, Play, Pause, Trash2, LogIn, Chrome, Loader2
+    User, Image as ImageIcon, FileText, Download, Play, Pause, Trash2, LogIn, Chrome, Loader2,
+    Users, Activity, Signal, LayoutGrid, Settings, Power, ShieldCheck, ArrowRight
 } from 'lucide-react';
 
 // --- HOOKS & SERVICES ---
 import useLocalStorage from '../../hooks/useLocalStorage';
-import { OMNI_KERNEL } from '../../services/omniRace'; 
 import { SidebarIStokContact, IStokSession, IStokProfile } from './components/SidebarIStokContact';
 import { ShareConnection } from './components/ShareConnection'; 
 import { ConnectionNotification } from './components/ConnectionNotification';
@@ -24,8 +24,6 @@ import { CallNotification } from './components/CallNotification';
 import { MessageBubble } from './components/MessageBubble'; 
 import { QRScanner } from './components/QRScanner'; 
 import { compressImage } from './components/gambar';
-import { IStokWalkieTalkie } from './components/IStokWalkieTalkie'; 
-import { MediaDrawer } from './components/MediaDrawer';
 import { IstokIdentityService, IStokUserIdentity } from './services/istokIdentity';
 import { IStokInput } from './components/IStokInput'; 
 
@@ -49,6 +47,10 @@ interface Message {
 }
 
 type ConnectionStage = 'IDLE' | 'LOCATING' | 'HANDSHAKE' | 'SECURE' | 'RECONNECTING';
+
+interface IStokViewProps {
+    onLogout: () => void;
+}
 
 // --- UTILS ---
 const playSound = (type: 'MSG_IN' | 'MSG_OUT' | 'CONNECT' | 'ERROR') => {
@@ -76,12 +78,12 @@ const playSound = (type: 'MSG_IN' | 'MSG_OUT' | 'CONNECT' | 'ERROR') => {
 };
 
 // --- MAIN VIEW CONTROLLER ---
-export const IStokView: React.FC = () => {
+export const IStokView: React.FC<IStokViewProps> = ({ onLogout }) => {
     // --- STATE MANAGEMENT ---
     const [stage, setStage] = useState<ConnectionStage>('IDLE');
     
-    // Identity State
-    const [identity, setIdentity] = useLocalStorage<IStokUserIdentity | null>('istok_google_identity', null);
+    // Identity State - DIRECTLY FROM GLOBAL STORAGE (NO LOGIN UI)
+    const [identity] = useLocalStorage<IStokUserIdentity | null>('istok_user_identity', null);
     
     // Profile (Mapped for UI)
     const [myProfile, setMyProfile] = useState<IStokProfile>({ id: '', username: '', created: 0 });
@@ -90,7 +92,7 @@ export const IStokView: React.FC = () => {
     
     // Connection Data
     const [targetPeerId, setTargetPeerId] = useState('');
-    const [accessPin, setAccessPin] = useState(''); // PIN still needed for encryption
+    const [accessPin, setAccessPin] = useState(''); // PIN for specific session encryption
     const [isConnected, setIsConnected] = useState(false);
     
     // Chat Data
@@ -104,10 +106,6 @@ export const IStokView: React.FC = () => {
     const [showShare, setShowShare] = useState(false);
     const [showCall, setShowCall] = useState(false);
     const [viewImage, setViewImage] = useState<string | null>(null);
-
-    // Auth UI State
-    const [authLoading, setAuthLoading] = useState(false);
-    const [authError, setAuthError] = useState<string | null>(null);
 
     // Notifications
     const [incomingRequest, setIncomingRequest] = useState<any>(null);
@@ -125,25 +123,32 @@ export const IStokView: React.FC = () => {
     useEffect(() => {
         activatePrivacyShield();
         
-        // Sync Identity to Profile format
-        if (identity) {
-            setMyProfile({
-                id: identity.istokId,
-                username: identity.displayName,
-                email: identity.email,
-                photoURL: identity.photoURL,
-                created: Date.now()
-            });
-            // Auto Init Peer if logged in
-            initPeer(identity.istokId);
+        // CRITICAL: GLOBAL IDENTITY CHECK
+        // If no identity exists from the main App login, kick user back to Auth.
+        // We do NOT ask for Google Login here.
+        if (!identity || !identity.istokId) {
+            console.warn("IStok Access Denied: No Global Identity Found.");
+            onLogout(); // Redirect to Main Auth
+            return;
         }
 
-        // URL Deep Link Handler
+        // Sync Identity to Profile format for UI
+        setMyProfile({
+            id: identity.istokId,
+            username: identity.displayName,
+            email: identity.email,
+            photoURL: identity.photoURL,
+            created: Date.now()
+        });
+        
+        // Auto Init Peer Network using the Global ID
+        initPeer(identity.istokId);
+
+        // URL Deep Link Handler (Auto-fill connection details)
         const urlParams = new URLSearchParams(window.location.search);
         if(urlParams.get('connect') && urlParams.get('key')) {
             setTargetPeerId(urlParams.get('connect')!);
             setAccessPin(urlParams.get('key')!);
-            // If logged in, auto connect logic would trigger here
         }
     }, [identity]);
 
@@ -151,30 +156,6 @@ export const IStokView: React.FC = () => {
     useEffect(() => {
         msgEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
-
-    // --- GOOGLE AUTH HANDLER ---
-    const handleLogin = async () => {
-        setAuthLoading(true);
-        setAuthError(null);
-        try {
-            const user = await IstokIdentityService.loginWithGoogle();
-            if (user) {
-                setIdentity(user);
-            }
-        } catch (e: any) {
-            setAuthError(e.message || "Authentication failed");
-        } finally {
-            setAuthLoading(false);
-        }
-    };
-
-    const handleLogout = async () => {
-        await IstokIdentityService.logout();
-        setIdentity(null);
-        setIsConnected(false);
-        peerRef.current?.destroy();
-        peerRef.current = null;
-    };
 
     // --- HYDRA NETWORK LAYER (PeerJS) ---
     const initPeer = async (myId: string) => {
@@ -210,9 +191,9 @@ export const IStokView: React.FC = () => {
 
             peer.on('open', (id) => {
                 console.log('[ISTOK] Secure ID Active:', id);
-                // Check if deep link pending
                 if (targetPeerId && accessPin) {
-                    connectToPeer(targetPeerId, accessPin);
+                    // Optional: Auto-connect if link provided? 
+                    // For security, let user click "Connect"
                 }
             });
 
@@ -282,8 +263,7 @@ export const IStokView: React.FC = () => {
         }
 
         // DECRYPTION - Need PIN
-        // If Host: PIN is generated by me. If Client: Input by user.
-        // For simplicity in P2P, we assume PIN is agreed OOB (Out of Band) or shared via Link.
+        // For incoming data, we assume the PIN is the Access PIN for this session
         const pin = accessPin || prompt("Incoming secure request. Enter decryption PIN:");
         if (!pin) return;
         setAccessPin(pin);
@@ -375,131 +355,177 @@ export const IStokView: React.FC = () => {
 
     // --- RENDERERS ---
 
-    // 1. LOGIN SCREEN
-    if (!identity) {
-        return (
-            <div className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-6 relative overflow-hidden">
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 pointer-events-none"></div>
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/10 blur-[120px] rounded-full pointer-events-none"></div>
-
-                <div className="relative z-10 text-center space-y-8 max-w-sm w-full">
-                    <div>
-                        <h1 className="text-4xl font-black text-white italic tracking-tighter mb-2">ISTOK <span className="text-emerald-500">ID</span></h1>
-                        <p className="text-xs font-mono text-neutral-500 uppercase tracking-widest">SECURE IDENTITY HASHING PROTOCOL</p>
-                    </div>
-
-                    <div className="p-6 bg-white/5 border border-white/10 rounded-[32px] backdrop-blur-md">
-                        <div className="w-16 h-16 bg-white text-black rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
-                            <Lock size={32} />
-                        </div>
-                        <h3 className="text-white font-bold text-lg mb-2">Authentication Required</h3>
-                        <p className="text-neutral-400 text-xs mb-6 leading-relaxed">
-                            Sign in to generate your Deterministic Hash ID. 
-                            Your email is used only to derive your public key.
-                        </p>
-                        <button 
-                            onClick={handleLogin}
-                            disabled={authLoading}
-                            className="w-full py-4 bg-white text-black hover:bg-neutral-200 rounded-xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 shadow-[0_0_30px_rgba(255,255,255,0.1)]"
-                        >
-                            {authLoading ? <Loader2 size={18} className="animate-spin" /> : <Chrome size={18} />}
-                            Login with Google
-                        </button>
-                        {authError && (
-                            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs font-medium">
-                                {authError}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex items-center justify-center gap-2 text-[10px] text-emerald-500/60 font-mono">
-                        <ShieldAlert size={12} /> MILITARY-GRADE ENCRYPTION READY
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // 2. CONNECTION SETUP (HOST/JOIN merged into one flow)
+    // 1. DASHBOARD MODE (Not Connected)
     if (!isConnected) {
         return (
-            <div className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-6 relative">
-                 <div className="absolute top-6 right-6 z-20">
-                     <button onClick={handleLogout} className="p-2 bg-white/5 rounded-full text-neutral-500 hover:text-white transition-all"><X size={20}/></button>
-                 </div>
-
-                 {/* Identity Card */}
-                 <div className="w-full max-w-sm bg-[#09090b] border border-white/10 p-6 rounded-[32px] text-center mb-8 relative overflow-hidden animate-slide-up">
-                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-transparent"></div>
-                     <img src={identity.photoURL || ''} className="w-16 h-16 rounded-full mx-auto mb-4 border-2 border-emerald-500/50 shadow-lg object-cover" alt="Profile" />
-                     <h2 className="text-white font-bold text-lg">{identity.displayName}</h2>
-                     <div className="mt-4 bg-black/50 p-3 rounded-xl border border-white/5 cursor-pointer hover:bg-black/80 transition-colors group" onClick={() => navigator.clipboard.writeText(identity.istokId)}>
-                         <label className="text-[9px] text-neutral-500 font-bold block mb-1 uppercase tracking-widest">YOUR SECURE ID</label>
-                         <code className="text-emerald-500 font-mono text-xs break-all group-hover:text-emerald-400">{identity.istokId}</code>
-                     </div>
-                 </div>
-
-                 {/* Connect Form */}
-                 <div className="w-full max-w-sm space-y-4 z-10 animate-slide-up" style={{animationDelay: '100ms'}}>
-                     <div className="space-y-3">
-                         <div className="relative">
-                            <input 
-                                value={targetPeerId} 
-                                onChange={e=>setTargetPeerId(e.target.value)} 
-                                placeholder="Target ID / Hash" 
-                                className="w-full bg-[#121214] border border-white/10 p-4 rounded-2xl text-white text-center text-sm font-mono focus:border-emerald-500 outline-none uppercase placeholder:text-neutral-700"
-                            />
-                            <button onClick={()=>setShowScanner(true)} className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-neutral-500 hover:text-white"><ScanLine size={20}/></button>
+            <div className="h-[100dvh] bg-[#050505] flex flex-col p-4 md:p-8 relative font-sans text-white overflow-hidden">
+                 
+                 {/* Top Navigation */}
+                 <div className="flex justify-between items-center z-20 mb-8 pt-safe">
+                     <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 rounded-xl bg-emerald-900/20 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
+                             <Radio size={20} />
                          </div>
+                         <div>
+                             <h1 className="font-black text-xl italic tracking-tighter uppercase">ISTOK <span className="text-emerald-500">SECURE</span></h1>
+                             <div className="flex items-center gap-2 text-[9px] font-mono text-neutral-500">
+                                <span className={`w-1.5 h-1.5 rounded-full ${peerRef.current?.id ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+                                {peerRef.current?.id ? 'UPLINK_READY' : 'OFFLINE'}
+                             </div>
+                         </div>
+                     </div>
+                     <button onClick={onLogout} className="p-2 bg-white/5 rounded-full text-neutral-500 hover:text-white transition-all">
+                         <Power size={18}/>
+                     </button>
+                 </div>
+
+                 {/* Main Dashboard Grid */}
+                 <div className="flex-1 overflow-y-auto custom-scroll space-y-6 z-10 max-w-4xl mx-auto w-full">
+                     
+                     {/* Identity Card */}
+                     <div className="bg-[#09090b] border border-white/10 rounded-[32px] p-6 relative overflow-hidden group">
+                         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none group-hover:bg-emerald-500/10 transition-colors duration-500"></div>
                          
-                         <input 
-                            value={accessPin} 
-                            onChange={e=>setAccessPin(e.target.value)} 
-                            placeholder="SESSION PIN (6 DIGIT)" 
-                            maxLength={6} 
-                            className="w-full bg-[#121214] border border-white/10 p-4 rounded-2xl text-white text-center text-sm font-mono tracking-[0.5em] focus:border-emerald-500 outline-none placeholder:tracking-normal placeholder:text-neutral-700"
-                        />
-                         
-                         <div className="grid grid-cols-2 gap-3 pt-2">
-                             <button onClick={()=>setShowShare(true)} className="py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-white text-xs font-bold border border-white/5">SHARE MY ID</button>
-                             <button 
-                                onClick={()=>connectToPeer(targetPeerId, accessPin)} 
-                                disabled={!targetPeerId || accessPin.length < 4}
-                                className="py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold text-xs shadow-lg shadow-emerald-900/20 disabled:opacity-50"
-                             >
-                                 {stage === 'IDLE' ? 'CONNECT' : stage + '...'}
+                         <div className="flex items-center gap-5 relative z-10">
+                             <div className="relative">
+                                <img src={identity?.photoURL} className="w-20 h-20 rounded-full border-2 border-emerald-500/50 object-cover shadow-lg shadow-emerald-900/20" alt="User" />
+                                <div className="absolute -bottom-1 -right-1 bg-[#09090b] p-1.5 rounded-full border border-white/10">
+                                    <ShieldCheck size={14} className="text-emerald-500"/>
+                                </div>
+                             </div>
+                             <div className="flex-1 min-w-0">
+                                 <h2 className="text-2xl font-bold truncate">{identity?.displayName}</h2>
+                                 <p className="text-xs text-neutral-500 font-mono mb-3 truncate">{identity?.email}</p>
+                                 <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/5 cursor-pointer hover:bg-white/10 transition-all" onClick={() => navigator.clipboard.writeText(identity?.istokId || '')}>
+                                     <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">ID:</span>
+                                     <code className="text-xs font-mono text-white truncate max-w-[150px]">{identity?.istokId}</code>
+                                     <Sparkles size={12} className="text-emerald-500"/>
+                                 </div>
+                             </div>
+                         </div>
+                     </div>
+
+                     {/* Quick Connect Panel */}
+                     <div className="bg-[#09090b] border border-white/10 rounded-[32px] p-6 space-y-6 shadow-xl">
+                         <div className="flex items-center gap-2 border-b border-white/5 pb-4">
+                             <Activity size={18} className="text-blue-500" />
+                             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white">ESTABLISH_CONNECTION</h3>
+                         </div>
+
+                         <div className="space-y-4">
+                             <div className="relative">
+                                <input 
+                                    value={targetPeerId} 
+                                    onChange={e=>setTargetPeerId(e.target.value)} 
+                                    placeholder="ENTER TARGET ID OR LINK" 
+                                    className="w-full bg-[#121214] border border-white/10 p-4 rounded-2xl text-white text-center text-sm font-mono focus:border-blue-500 outline-none uppercase placeholder:text-neutral-700 transition-all focus:shadow-[0_0_20px_rgba(59,130,246,0.2)]"
+                                />
+                                <button onClick={()=>setShowScanner(true)} className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-neutral-500 hover:text-white bg-white/5 rounded-xl transition-all hover:scale-110">
+                                    <ScanLine size={18}/>
+                                </button>
+                             </div>
+                             
+                             <div className="flex gap-3">
+                                 <input 
+                                    value={accessPin} 
+                                    onChange={e=>setAccessPin(e.target.value)} 
+                                    placeholder="PIN (6)" 
+                                    maxLength={6} 
+                                    className="w-32 bg-[#121214] border border-white/10 p-4 rounded-2xl text-white text-center text-sm font-mono tracking-[0.3em] focus:border-blue-500 outline-none transition-all placeholder:tracking-normal placeholder:text-neutral-700"
+                                />
+                                <button 
+                                    onClick={()=>connectToPeer(targetPeerId, accessPin)} 
+                                    disabled={!targetPeerId || accessPin.length < 4}
+                                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2 group active:scale-95"
+                                >
+                                    {stage === 'IDLE' ? 'CONNECT NOW' : <><Loader2 size={14} className="animate-spin"/> {stage}...</>} <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform"/>
+                                </button>
+                             </div>
+                         </div>
+
+                         <div className="grid grid-cols-2 gap-3">
+                             <button onClick={()=>setShowShare(true)} className="py-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/5 text-neutral-300 hover:text-white transition-all flex flex-col items-center gap-2 group active:scale-95">
+                                 <QrCode size={20} className="text-emerald-500 group-hover:scale-110 transition-transform"/>
+                                 <span className="text-[10px] font-bold uppercase tracking-wider">SHARE MY ID</span>
+                             </button>
+                             <button onClick={()=>setShowSidebar(true)} className="py-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/5 text-neutral-300 hover:text-white transition-all flex flex-col items-center gap-2 group active:scale-95">
+                                 <Users size={20} className="text-purple-500 group-hover:scale-110 transition-transform"/>
+                                 <span className="text-[10px] font-bold uppercase tracking-wider">CONTACTS</span>
                              </button>
                          </div>
                      </div>
+
+                     {/* Radar / Status Footer */}
+                     <div className="flex items-center justify-between px-2 opacity-50">
+                         <div className="flex items-center gap-4 text-[9px] font-mono">
+                             <span className="flex items-center gap-1"><Signal size={10}/> P2P: {peerRef.current ? 'ACTIVE' : 'INIT'}</span>
+                             <span className="flex items-center gap-1"><Server size={10}/> RELAY: {process.env.VITE_METERED_API_KEY ? 'TITANIUM' : 'STANDARD'}</span>
+                         </div>
+                         <div className="text-[9px] font-black uppercase tracking-[0.2em]">V25.0_SECURE</div>
+                     </div>
                  </div>
+
+                 {/* Background Grid */}
+                 <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none opacity-20"></div>
+                 
+                 {/* Modals */}
+                 {showScanner && <QRScanner onScan={(val: string) => { 
+                    try {
+                        const url = new URL(val);
+                        const c = url.searchParams.get('connect');
+                        const k = url.searchParams.get('key');
+                        if(c && k) { setTargetPeerId(c); setAccessPin(k); connectToPeer(c, k); }
+                        else { setTargetPeerId(val); }
+                    } catch { setTargetPeerId(val); }
+                    setShowScanner(false);
+                }} onClose={()=>setShowScanner(false)} />}
+
+                {showShare && <ShareConnection peerId={identity?.istokId || ''} pin={accessPin || '000000'} onClose={()=>setShowShare(false)} />}
+                
+                <SidebarIStokContact 
+                    isOpen={showSidebar} 
+                    onClose={()=>setShowSidebar(false)} 
+                    sessions={sessions} 
+                    profile={myProfile}
+                    onSelect={(s)=>{setTargetPeerId(s.id); if(s.pin) setAccessPin(s.pin); setShowSidebar(false);}}
+                    onDeleteSession={()=>{}} 
+                    onCallContact={()=>{}} 
+                    onLogout={onLogout} 
+                    onRenameSession={()=>{}} 
+                    currentPeerId={null}
+                />
             </div>
         );
     }
 
-    // 3. CHAT INTERFACE (Standard)
+    // 2. CHAT INTERFACE (Connected)
     return (
-        <div className="h-[100dvh] bg-[#050505] flex flex-col relative overflow-hidden">
-             {/* ... Same Chat UI as before ... */}
+        <div className="h-[100dvh] bg-[#050505] flex flex-col relative overflow-hidden font-sans">
              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none"></div>
              
-             {/* Header */}
-             <div className="bg-[#09090b] border-b border-white/10 p-4 pt-safe flex justify-between items-center z-20">
+             {/* Chat Header */}
+             <div className="bg-[#09090b]/80 backdrop-blur-md border-b border-white/10 p-4 pt-safe flex justify-between items-center z-20 shadow-sm">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-900/20 border border-emerald-500/30 flex items-center justify-center text-emerald-500 overflow-hidden">
-                         {/* We don't have peer photo unless handshake sent it. Assuming basic UI for now */}
-                        <User size={20}/>
+                    <div className="relative">
+                        <div className="w-10 h-10 rounded-full bg-emerald-900/20 border border-emerald-500/30 flex items-center justify-center text-emerald-500 overflow-hidden shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                            <User size={20}/>
+                        </div>
+                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#09090b] animate-pulse"></div>
                     </div>
                     <div>
-                        <h3 className="text-white font-bold text-sm">SECURE_LINK</h3>
-                        <div className="flex items-center gap-2 text-[10px] font-mono text-emerald-500">
-                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"/>
-                            ENCRYPTED
+                        <h3 className="text-white font-black text-sm uppercase tracking-wide flex items-center gap-2">
+                            SECURE_CHANNEL <Lock size={10} className="text-emerald-500"/>
+                        </h3>
+                        <div className="flex items-center gap-2 text-[9px] font-mono text-emerald-500/70">
+                            <span>{targetPeerId.slice(0,8)}...</span>
+                            <span className="w-1 h-1 rounded-full bg-emerald-500/50"></span>
+                            <span>AES-256</span>
                         </div>
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={()=>setShowCall(true)} className="p-2 hover:bg-white/5 rounded-lg text-neutral-400 hover:text-white transition"><PhoneCall size={18}/></button>
-                    <button onClick={()=>setShowSidebar(true)} className="p-2 hover:bg-white/5 rounded-lg text-neutral-400 hover:text-white transition"><Menu size={18}/></button>
+                    <button onClick={()=>setShowCall(true)} className="p-2.5 hover:bg-emerald-500/10 rounded-xl text-neutral-400 hover:text-emerald-500 transition border border-transparent hover:border-emerald-500/20"><PhoneCall size={18}/></button>
+                    <button onClick={handleDisconnect} className="p-2.5 hover:bg-red-500/10 rounded-xl text-neutral-400 hover:text-red-500 transition border border-transparent hover:border-red-500/20"><X size={18}/></button>
                 </div>
              </div>
 
@@ -511,7 +537,7 @@ export const IStokView: React.FC = () => {
                 <div ref={msgEndRef}/>
              </div>
 
-             {/* Input */}
+             {/* Input Area */}
              <IStokInput 
                 onSend={(txt: string) => sendMessage('TEXT', txt)}
                 onSendFile={() => fileInputRef.current?.click()}
@@ -526,7 +552,7 @@ export const IStokView: React.FC = () => {
 
             {/* Overlays */}
             {incomingRequest && (
-                <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur flex items-center justify-center p-6">
+                <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur flex items-center justify-center p-6 animate-fade-in">
                     <ConnectionNotification 
                         identity={incomingRequest.identity} 
                         peerId={incomingRequest.peerId}
@@ -548,35 +574,17 @@ export const IStokView: React.FC = () => {
                 </div>
             )}
             
-            {showScanner && <QRScanner onScan={(val: string) => { 
-                try {
-                    const url = new URL(val);
-                    const c = url.searchParams.get('connect');
-                    const k = url.searchParams.get('key');
-                    if(c && k) { setTargetPeerId(c); setAccessPin(k); connectToPeer(c, k); }
-                    else { setTargetPeerId(val); }
-                } catch { setTargetPeerId(val); }
-                setShowScanner(false);
-            }} onClose={()=>setShowScanner(false)} />}
-
-            {showShare && <ShareConnection peerId={identity?.istokId || ''} pin={accessPin || '000000'} onClose={()=>setShowShare(false)} />}
-            
             {showCall && <TeleponanView onClose={()=>setShowCall(false)} existingPeer={peerRef.current} initialTargetId={targetPeerId} incomingCall={incomingCall} secretPin={accessPin} />}
             
             {incomingCall && !showCall && <CallNotification identity="Secure Peer" onAnswer={()=>setShowCall(true)} onDecline={()=>{incomingCall.close(); setIncomingCall(null);}} />}
             
-            <SidebarIStokContact 
-                isOpen={showSidebar} 
-                onClose={()=>setShowSidebar(false)} 
-                sessions={sessions} 
-                profile={myProfile}
-                onSelect={()=>{}}
-                onDeleteSession={()=>{}} 
-                onCallContact={()=>{}} 
-                onLogout={handleLogout} 
-                onRenameSession={()=>{}} 
-                currentPeerId={targetPeerId}
-            />
+            {/* Image Viewer */}
+            {viewImage && (
+                <div className="fixed inset-0 z-[3000] bg-black/95 backdrop-blur flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewImage(null)}>
+                    <img src={viewImage} className="max-w-full max-h-full rounded-lg shadow-2xl border border-white/10" alt="Secure Content" />
+                    <button className="absolute top-4 right-4 p-3 bg-white/10 rounded-full text-white hover:bg-red-500 transition-colors"><X size={24}/></button>
+                </div>
+            )}
         </div>
     );
 };

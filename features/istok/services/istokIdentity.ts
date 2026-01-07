@@ -55,9 +55,13 @@ export const IstokIdentityService = {
                 throw new Error("Login cancelled by user.");
             }
 
-            // Handle Cross-Origin-Opener-Policy blocking
-            if (errCode === 'auth/popup-blocked' || errMsg.includes('Cross-Origin-Opener-Policy')) {
-                throw new Error("Popup blocked. Please check browser settings or switch to a compatible browser.");
+            // Handle Cross-Origin-Opener-Policy blocking (Browsers blocking window.closed)
+            if (
+                errCode === 'auth/popup-blocked' || 
+                errMsg.includes('Cross-Origin-Opener-Policy') ||
+                errMsg.includes('window.closed')
+            ) {
+                throw new Error("Popup blocked by browser policy (COOP). Please use Chrome/Edge or check popup settings.");
             }
 
             debugService.log('ERROR', 'ISTOK_AUTH', 'LOGIN_FAIL', `${errCode}: ${errMsg}`);

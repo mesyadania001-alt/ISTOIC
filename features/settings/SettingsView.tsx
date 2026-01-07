@@ -1,16 +1,18 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { 
     User, UserCheck, Database, Palette, Globe, Shield, 
     X, Check, LogOut, ChevronRight, Moon, Sun, Monitor,
-    Save, RefreshCw, Smartphone
+    Save, RefreshCw, Cpu, Zap, Wifi, Activity, Layers, Download, Upload
 } from 'lucide-react';
-import { TRANSLATIONS, getLang, getText } from '../../services/i18n';
+import { TRANSLATIONS, getLang } from '../../services/i18n';
 import { IstokIdentityService } from '../istok/services/istokIdentity';
 import { debugService } from '../../services/debugService';
 import { getUserPersona } from '../../services/persona';
 import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
+import { useFeatures, type SystemFeature } from '../../contexts/FeatureContext';
+import { db } from '../../services/storage';
 
 interface SettingsViewProps {
     onNavigate: (feature: any) => void;
@@ -19,13 +21,36 @@ interface SettingsViewProps {
 const SettingsSection: React.FC<{ title: string, icon: React.ReactNode, children: React.ReactNode }> = ({ title, icon, children }) => (
     <div className="space-y-4 mb-8">
         <div className="flex items-center gap-2 text-skin-muted px-2">
-            {React.cloneElement(icon as React.ReactElement, { size: 16 })}
+            {React.cloneElement(icon as React.ReactElement<any>, { size: 16 })}
             <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">{title}</h3>
         </div>
         <div className="space-y-3">
             {children}
         </div>
     </div>
+);
+
+const FeatureToggle: React.FC<{ 
+    label: string, 
+    desc: string, 
+    isEnabled: boolean, 
+    onToggle: () => void 
+}> = ({ label, desc, isEnabled, onToggle }) => (
+    <button 
+        onClick={onToggle}
+        className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all group text-left ${isEnabled ? 'bg-skin-surface border-accent/30' : 'bg-skin-card border-skin-border opacity-70 hover:opacity-100'}`}
+    >
+        <div>
+            <div className="flex items-center gap-2 mb-1">
+                <span className={`text-[10px] font-black uppercase tracking-widest ${isEnabled ? 'text-accent' : 'text-skin-muted'}`}>{label}</span>
+                {isEnabled && <div className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_5px_var(--accent-color)]"></div>}
+            </div>
+            <p className="text-[9px] text-skin-muted font-medium">{desc}</p>
+        </div>
+        <div className={`w-10 h-5 rounded-full relative transition-colors ${isEnabled ? 'bg-accent' : 'bg-skin-border'}`}>
+            <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all shadow-sm ${isEnabled ? 'left-6' : 'left-1'}`}></div>
+        </div>
+    </button>
 );
 
 const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
@@ -35,16 +60,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     const [appLanguage, setAppLanguage] = useLocalStorage('app_language', 'id');
     const [colorScheme, setColorScheme] = useLocalStorage('app_color_scheme', 'system');
     
+    const { features, toggleFeature } = useFeatures();
+    const [identity] = useLocalStorage<any>('istok_user_identity', null);
+    
     // UI State
     const [isSaving, setIsSaving] = useState(false);
     const [isEditingId, setIsEditingId] = useState(false);
     const [newCodenameInput, setNewCodenameInput] = useState('');
     const [idUpdateMsg, setIdUpdateMsg] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     // Derived
     const currentLang = getLang();
     const t = TRANSLATIONS[currentLang].settings;
-    const [identity] = useLocalStorage<any>('istok_user_identity', null);
 
     const handleSavePersona = () => {
         setIsSaving(true);
@@ -88,6 +116,63 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
             window.location.reload();
         }
     };
+
+    const handleBackup = async () => {
+        try {
+            const notes = await db.getAll('NOTES');
+            const chats = await db.getAll('CHATS');
+            
+            const backupData = {
+                version: "1.0",
+                timestamp: new Date().toISOString(),
+                notes,
+                chats,
+                persona: localPersona,
+                features
+            };
+            
+            const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `istoic_backup_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            debugService.logAction(UI_REGISTRY.SETTINGS_BTN_BACKUP, FN_REGISTRY.BACKUP_DATA, 'SUCCESS');
+        } catch (e) {
+            console.error("Backup Failed", e);
+            alert("Backup failed. Check console.");
+        }
+    };
+
+    const handleRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            try {
+                const data = JSON.parse(ev.target?.result as string);
+                if (data.notes) await db.saveAll('NOTES', data.notes);
+                if (data.chats) await db.saveAll('CHATS', data.chats);
+                if (data.persona) setLocalPersona(data.persona);
+                
+                alert("Restore Successful. Reloading...");
+                window.location.reload();
+            } catch (err) {
+                alert("Invalid Backup File");
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const FEATURE_LIST: { id: SystemFeature; label: string; desc: string }[] = [
+        { id: 'OMNI_RACE', label: 'HYDRA OMNI-RACE', desc: 'Parallel API execution engine for speed.' },
+        { id: 'LIVE_LINK', label: 'NEURAL UPLINK', desc: 'Real-time audio processing module.' },
+        { id: 'VISUAL_ENGINE', label: 'VISUAL CORE', desc: 'Canvas-based audio visualization.' },
+        { id: 'AUTO_DIAGNOSTICS', label: 'AUTO MECHANIC', desc: 'Background system health monitoring.' },
+        { id: 'HIGH_PERF_UI', label: 'GLASS UI ENGINE', desc: 'High-fidelity blur & animations (High GPU).' },
+    ];
 
     return (
         <div className="h-full flex flex-col p-4 md:p-8 lg:p-12 pb-32 overflow-hidden font-sans animate-fade-in text-skin-text">
@@ -194,7 +279,22 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
                     </div>
                 </SettingsSection>
 
-                {/* 2. VISUAL & LANGUAGE */}
+                {/* 2. SYSTEM MODULES (Restored) */}
+                <SettingsSection title="SYSTEM MODULES" icon={<Cpu size={18} />}>
+                    <div className="p-6 bg-skin-card rounded-[24px] border border-skin-border grid grid-cols-1 md:grid-cols-2 gap-4">
+                         {FEATURE_LIST.map((feat) => (
+                             <FeatureToggle 
+                                key={feat.id}
+                                label={feat.label}
+                                desc={feat.desc}
+                                isEnabled={features[feat.id]}
+                                onToggle={() => toggleFeature(feat.id)}
+                             />
+                         ))}
+                    </div>
+                </SettingsSection>
+
+                {/* 3. VISUAL & LANGUAGE */}
                 <SettingsSection title={t.theme_label || "APPEARANCE"} icon={<Palette size={18} />}>
                     <div className="p-6 bg-skin-card rounded-[24px] border border-skin-border grid grid-cols-1 md:grid-cols-2 gap-6">
                         
@@ -238,23 +338,37 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
                     </div>
                 </SettingsSection>
 
-                {/* 3. DANGER ZONE */}
+                {/* 4. DANGER ZONE (Updated) */}
                 <SettingsSection title={t.data_title || "SYSTEM DATA"} icon={<Database size={18} />}>
-                    <div className="p-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <button onClick={handleBackup} className="p-4 bg-skin-card border border-skin-border hover:border-accent/50 rounded-2xl flex items-center gap-3 group transition-all">
+                            <div className="p-2.5 bg-blue-500/10 text-blue-500 rounded-lg group-hover:bg-blue-500 group-hover:text-white transition-colors"><Download size={18}/></div>
+                            <div className="text-left">
+                                <h4 className="text-[10px] font-black text-skin-text uppercase tracking-widest">{t.backup}</h4>
+                                <p className="text-[9px] text-skin-muted">Export local vault to JSON.</p>
+                            </div>
+                        </button>
+
+                        <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-skin-card border border-skin-border hover:border-emerald-500/50 rounded-2xl flex items-center gap-3 group transition-all">
+                            <div className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors"><Upload size={18}/></div>
+                            <div className="text-left">
+                                <h4 className="text-[10px] font-black text-skin-text uppercase tracking-widest">{t.restore}</h4>
+                                <p className="text-[9px] text-skin-muted">Import JSON backup.</p>
+                            </div>
+                            <input type="file" ref={fileInputRef} className="hidden" accept="application/json" onChange={handleRestore} />
+                        </button>
+
                         <button 
                             onClick={handleReset}
-                            className="w-full p-4 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-between group transition-all"
+                            className="w-full p-4 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 group transition-all md:col-span-2"
                         >
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-red-500/10 text-red-500 rounded-xl border border-red-500/20 group-hover:scale-110 transition-transform">
-                                    <LogOut size={20} />
-                                </div>
-                                <div className="text-left">
-                                    <h4 className="text-xs font-black text-red-500 uppercase tracking-widest">FACTORY RESET</h4>
-                                    <p className="text-[9px] text-red-400/70 font-mono mt-1">WIPE ALL LOCAL DATA & CREDENTIALS</p>
-                                </div>
+                            <div className="p-2.5 bg-red-500/10 text-red-500 rounded-lg border border-red-500/20 group-hover:scale-110 transition-transform">
+                                <LogOut size={18} />
                             </div>
-                            <ChevronRight size={16} className="text-red-500 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                            <div className="text-left">
+                                <h4 className="text-xs font-black text-red-500 uppercase tracking-widest">FACTORY RESET</h4>
+                                <p className="text-[9px] text-red-400/70 font-mono">WIPE ALL LOCAL DATA & CREDENTIALS</p>
+                            </div>
                         </button>
                     </div>
                 </SettingsSection>

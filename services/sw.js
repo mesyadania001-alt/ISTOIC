@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'istoic-cache-v27';
+const CACHE_NAME = 'istoic-cache-v28';
 const OFFLINE_URL = '/index.html';
 
 self.addEventListener('install', (event) => {
@@ -7,7 +7,17 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
 });
 
 // Handle incoming messages from the main app (IStokView) to trigger System Notifications
