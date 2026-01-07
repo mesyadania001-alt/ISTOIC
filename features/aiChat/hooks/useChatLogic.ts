@@ -37,9 +37,11 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     
     // Refs for background processes (Memory Core)
     const notesRef = useRef(notes);
+    const activeThreadRef = useRef<ChatThread | null>(null);
+
+    useEffect(() => { notesRef.current = notes; }, [notes]);
     
     // 3. ROBUST ACTIVE THREAD RESOLUTION
-    // Uses pendingThreadId if activeThreadId matches it but thread isn't found yet (race condition fix)
     const activeThread = useMemo(() => {
         // Priority 1: Direct match from Storage ID
         let thread = threads.find(t => t.id === activeThreadId);
@@ -52,8 +54,6 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         return thread || null;
     }, [threads, activeThreadId]);
 
-    const activeThreadRef = useRef<ChatThread | null>(null);
-    useEffect(() => { notesRef.current = notes; }, [notes]);
     useEffect(() => { activeThreadRef.current = activeThread; }, [activeThread]);
 
     const activeModel = useMemo(() => {
@@ -86,24 +86,19 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     }, [setNotes]);
 
     const handleNewChat = useCallback(async (persona: 'hanisah' | 'stoic' = 'stoic') => {
-        // Memorize previous thread before switching
         triggerMemoryConsolidation();
 
         const welcome = persona === 'hanisah' 
             ? "⚡ **HANISAH V20 ONLINE.**\n\n*Hai sayang, sistem udah di-upgrade nih. Mau ngomongin apa? Atau mau pantun?*" 
             : "🧠 **STOIC V20 TITANIUM.**\n\n*Logic Core V20 Initialized.*\nSistem stabil. Rotasi kunci aktif. Mari bedah realitas dengan logika.";
         
-        // Use storage to create thread which handles IDB sync
         const newThread = createThread(persona, globalModelId, welcome);
-        
-        // CRITICAL: Set pending ID immediately so UI doesn't flicker
         pendingThreadId.current = newThread.id;
         
         return newThread;
     }, [createThread, globalModelId, triggerMemoryConsolidation]);
 
     const deleteThreadWrapper = useCallback((id: string) => {
-        // If deleting active thread, memorize it first.
         if (activeThreadRef.current?.id === id) {
             triggerMemoryConsolidation();
         } else {
@@ -116,27 +111,53 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
     const handleSendMessage = async (e?: React.FormEvent, attachment?: { data: string, mimeType: string }) => {
         const userMsg = input.trim();
         if ((!userMsg && !attachment) || isLoading) return;
-
-        // Clear input immediately for responsiveness
+        
+        // Clear input immediately
         setInput('');
 
         let currentThreadId = activeThreadId;
         let currentPersona = personaMode; 
-
-        // CRITICAL FIX: Verify thread actually exists in loaded threads.
         const threadExists = threads.some(t => t.id === currentThreadId);
 
-        // If no thread or invalid ID, create new one
+        // --- CASE 1: NEW CHAT (ATOMIC UPDATE) ---
         if (!currentThreadId || !threadExists) {
-            const newThread = await handleNewChat(personaMode);
-            currentThreadId = newThread.id;
-            currentPersona = newThread.persona;
-            
-            // Force small delay to allow React state to catch up with the new thread creation
-            // This prevents "Message sent to void" error
-            await new Promise(r => setTimeout(r, 50));
+             const newId = uuidv4();
+             const welcomeMsg = personaMode === 'hanisah' 
+                ? "⚡ **HANISAH V20 ONLINE.**\n\n*Hai sayang, sistem udah di-upgrade nih. Mau ngomongin apa?*" 
+                : "🧠 **STOIC V20 TITANIUM.**\n\n*Logic Core V20 Initialized.*";
+
+             const newUserMsg: ChatMessage = {
+                id: uuidv4(),
+                role: 'user',
+                text: attachment ? (userMsg || "Analyze attachment") : userMsg,
+                metadata: { status: 'success' }
+            };
+
+            const newThread: ChatThread = {
+                id: newId,
+                title: userMsg.slice(0, 30).toUpperCase() || 'NEW_SESSION',
+                persona: personaMode,
+                model_id: globalModelId,
+                messages: [
+                    { id: uuidv4(), role: 'model', text: welcomeMsg, metadata: { status: 'success', model: 'System' } },
+                    newUserMsg
+                ],
+                updated: new Date().toISOString(),
+                isPinned: false
+            };
+
+            // Atomic State Update: Create thread AND add user message in one go
+            setThreads(prev => [newThread, ...prev]);
+            setActiveThreadId(newId);
+            pendingThreadId.current = newId;
+            currentThreadId = newId;
+
+            // Trigger AI Stream immediately
+            await streamMessage(userMsg, activeModel, newId, personaMode, attachment);
+            return;
         }
 
+        // --- CASE 2: EXISTING CHAT ---
         const newUserMsg: ChatMessage = {
             id: uuidv4(),
             role: 'user',
@@ -144,7 +165,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             metadata: { status: 'success' }
         };
 
-        // 1. UPDATE STATE & DB (Single Source of Truth)
+        // Update State
         addMessage(currentThreadId!, newUserMsg);
         
         // Auto rename check
@@ -153,8 +174,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             renameThread(currentThreadId!, userMsg.slice(0, 30).toUpperCase());
         }
         
-        // 2. Trigger Stream with explicit ID to avoid race condition
-        // We pass the ID explicitly so stream doesn't rely on potentially stale 'activeThread' state
+        // Trigger Stream
         await streamMessage(userMsg, activeModel, currentThreadId!, currentPersona, attachment);
     };
 

@@ -121,7 +121,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         generateWithPollinations,
         imageModelId,
         setImageModelId,
-        isThreadsLoaded // NEW: Loading state
+        isThreadsLoaded
     } = chatLogic;
 
     // ... (Refs and Effects same as before) ...
@@ -407,6 +407,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                         </div>
                     ) : (
                         <ChatWindow 
+                            key={activeThreadId || 'new'} // IMPORTANT: Force re-mount on thread switch
                             messages={activeThread?.messages || []}
                             personaMode={personaMode}
                             isLoading={isLoading}
