@@ -5,7 +5,9 @@ import { debugService } from '../services/debugService';
 
 export const useGlobalPeer = (identity: IStokUserIdentity | null) => {
     const peerRef = useRef<any>(null);
+    // GLOBAL STATE FOR INCOMING REQUESTS
     const [incomingConnection, setIncomingConnection] = useState<any>(null);
+    
     const [status, setStatus] = useState<'INIT' | 'CONNECTING' | 'READY' | 'DISCONNECTED' | 'ERROR' | 'RATE_LIMITED' | 'ID_TAKEN'>('INIT');
     const [peerId, setPeerId] = useState<string | null>(null);
     const [isPeerReady, setIsPeerReady] = useState(false);
@@ -140,6 +142,8 @@ export const useGlobalPeer = (identity: IStokUserIdentity | null) => {
                 retryCount.current = 0;
             });
 
+            // --- CRITICAL FIX: THE VIGILANTE LISTENER ---
+            // This listens for connections globally and updates the hook state
             peer.on('connection', (conn) => {
                 console.log(`[HYDRA] INCOMING SIGNAL from ${conn.peer}`);
                 
@@ -153,7 +157,7 @@ export const useGlobalPeer = (identity: IStokUserIdentity | null) => {
 
                 conn.on('data', (data: any) => {
                     if (data.type === 'SYS' || data.type === 'HANDSHAKE_SYN') {
-                        // Update data handshake saat paket tiba
+                        // Update data handshake saat paket tiba (usually <500ms later)
                         setIncomingConnection((prev: any) => ({ 
                             ...prev,
                             conn, // Ensure conn ref is fresh
@@ -264,7 +268,7 @@ export const useGlobalPeer = (identity: IStokUserIdentity | null) => {
         isPeerReady: status === 'READY',
         status, 
         peerId, 
-        incomingConnection,
+        incomingConnection, // <--- EXPOSED TO APP
         clearIncoming: () => setIncomingConnection(null),
         forceReconnect: () => {
              console.log("[HYDRA] MANUAL FORCE RECONNECT");

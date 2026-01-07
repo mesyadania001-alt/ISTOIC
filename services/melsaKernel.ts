@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { debugService } from "./debugService";
 import { HANISAH_BRAIN } from "./melsaBrain";
@@ -24,6 +23,7 @@ export class HanisahKernel {
   private history: any[] = [];
 
   private getActiveTools(provider: string, isThinking: boolean, currentMsg: string = ''): any[] {
+      // Tools logic preserved
       if (provider === 'GEMINI') {
           const configStr = localStorage.getItem('hanisah_tools_config');
           const config = configStr ? JSON.parse(configStr) : { search: true, vault: true, visual: true };
@@ -39,158 +39,81 @@ export class HanisahKernel {
       return universalTools.functionDeclarations ? [universalTools] : [];
   }
 
-  private buildContext(history: any[], currentMsg: string, systemPrompt: string, limit: number): any[] {
-      const maxInputTokens = Math.max(4000, limit - 4000);
-      let usedTokens = estimateTokens(systemPrompt) + estimateTokens(currentMsg);
-      const messagesToSend: any[] = [];
-      for (let i = history.length - 1; i >= 0; i--) {
-          const entry = history[i];
-          const content = typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.parts);
-          const tokens = estimateTokens(content);
-          if (usedTokens + tokens < maxInputTokens) {
-              messagesToSend.unshift(entry);
-              usedTokens += tokens;
-          } else break;
-      }
-      return messagesToSend;
-  }
-
   async *streamExecute(msg: string, initialModelId: string, contextNotes: Note[] | string = [], imageData?: { data: string, mimeType: string }, configOverride?: any): AsyncGenerator<StreamChunk> {
     const systemPrompt = configOverride?.systemInstruction || await HANISAH_BRAIN.getSystemInstruction('hanisah', msg, contextNotes);
     const signal = configOverride?.signal; 
     let currentModelId = initialModelId === 'auto-best' ? MODEL_IDS.GEMINI_FLASH : initialModelId;
 
-    const plan = [...new Set([currentModelId, MODEL_IDS.GEMINI_FLASH, MODEL_IDS.GEMINI_PRO, MODEL_IDS.LLAMA_70B])];
+    // We prioritize the secure proxy for Gemini models to avoid Client-Side API Key issues
+    const model = MASTER_MODEL_CATALOG.find(m => m.id === currentModelId) || MASTER_MODEL_CATALOG[0];
     
-    let attempts = 0;
-    let hasYielded = false;
+    try {
+        // --- SECURE BACKEND PROXY ROUTE (PRIMARY) ---
+        if (model.provider === 'GEMINI') {
+            debugService.log('INFO', 'KERNEL', 'PROXY', `Routing ${model.id} via Secure Backend...`);
+            
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: msg,
+                    modelId: model.id,
+                    systemInstruction: systemPrompt
+                }),
+                signal
+            });
 
-    for (let i = 0; i < plan.length; i++) {
-        if (signal?.aborted) break;
-        const modelId = plan[i];
-        const model = MASTER_MODEL_CATALOG.find(m => m.id === modelId) || MASTER_MODEL_CATALOG[0];
-        const key = GLOBAL_VAULT.getKey(model.provider as Provider);
-
-        if (!key) continue;
-        attempts++;
-
-        try {
-            // --- SECURITY INTERCEPTION FOR SERVER-SIDE MANAGED KEYS ---
-            if (key === 'server-side-managed') {
-                debugService.log('INFO', 'KERNEL', 'PROXY', `Offloading ${model.id} to Secure Backend...`);
-                
-                // Convert History to Standard format for Proxy
-                const standardHistory = this.history.map(h => ({ 
-                    role: h.role === 'model' ? 'assistant' : 'user', 
-                    content: h.parts ? h.parts[0].text : h.content 
-                }));
-                const fullMessages = [...standardHistory, { role: 'user', content: msg }];
-
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: msg, // Actually unused if we send context, but kept for compatibility
-                        modelId: model.id,
-                        provider: model.provider,
-                        context: systemPrompt // Sending system prompt as context
-                        // Note: Full history handling might need adjustment in api/chat.ts if it only takes 'message'
-                        // But api/chat.ts as written mostly handles single prompt or basic context. 
-                        // For full convo, we'd need to update api/chat.ts to accept 'messages' array. 
-                        // For this fix, we send the aggregated system prompt + msg.
-                    }),
-                    signal
-                });
-
-                if (!response.ok) throw new Error(`Backend Error: ${response.statusText}`);
-                if (!response.body) throw new Error("No response body");
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let fullText = "";
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    const chunkText = decoder.decode(value, { stream: true });
-                    fullText += chunkText;
-                    yield { text: chunkText };
-                    hasYielded = true;
-                }
-
-                if (hasYielded) {
-                    this.updateHistory(msg, fullText);
-                    return; 
-                }
-            } 
-            // --- END PROXY LOGIC ---
-
-            // CLIENT SIDE LOGIC (DEV ONLY)
-            const isThinking = model.specs.speed === 'THINKING';
-            const activeTools = configOverride?.tools || this.getActiveTools(model.provider, isThinking, msg);
-            const contextLimit = model.specs.contextLimit || 128000;
-            const optimizedHistory = this.buildContext(this.history, msg, systemPrompt, contextLimit);
-
-            if (model.provider === 'GEMINI') {
-                const ai = new GoogleGenAI({ apiKey: key });
-                const contents = [
-                    ...optimizedHistory.map(h => ({ role: h.role, parts: h.parts })), 
-                    { role: 'user', parts: imageData ? [{ inlineData: imageData }, { text: msg }] : [{ text: msg }] }
-                ];
-                const stream = await ai.models.generateContentStream({ model: model.id, contents, config: { systemInstruction: systemPrompt, temperature: 0.7, tools: activeTools } });
-                let fullText = "";
-                for await (const chunk of stream) {
-                    if (signal?.aborted) break;
-                    if (chunk.text) { 
-                        fullText += chunk.text; 
-                        yield { text: chunk.text }; 
-                        hasYielded = true;
-                    }
-                    if (chunk.functionCalls?.length) {
-                        yield { functionCall: chunk.functionCalls[0] };
-                        hasYielded = true;
-                    }
-                    if (chunk.candidates?.[0]?.groundingMetadata?.groundingChunks) yield { groundingChunks: chunk.candidates[0].groundingMetadata.groundingChunks };
-                }
-                if (hasYielded) {
-                    this.updateHistory(msg, fullText);
-                    return;
-                }
-            } else {
-                // OpenAI Compatible Client-Side (Dev Key)
-                const standardHistory = optimizedHistory.map(h => ({ role: h.role === 'model' ? 'assistant' : 'user', content: h.parts[0]?.text || '' }));
-                const stream = streamOpenAICompatible(model.provider as any, model.id, [...standardHistory, { role: 'user', content: msg }], systemPrompt, activeTools, signal);
-                let fullText = "";
-                for await (const chunk of stream) {
-                    if (signal?.aborted) break;
-                    if (chunk.text) { 
-                        fullText += chunk.text; 
-                        yield { text: chunk.text }; 
-                        hasYielded = true;
-                    }
-                    if (chunk.functionCall) {
-                        yield { functionCall: chunk.functionCall };
-                        hasYielded = true;
-                    }
-                }
-                if (hasYielded) {
-                    this.updateHistory(msg, fullText);
-                    return;
-                }
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Backend Error (${response.status}): ${errText}`);
             }
-        } catch (err: any) {
-            GLOBAL_VAULT.reportFailure(model.provider as Provider, key, err);
-            if (i < plan.length - 1) yield { metadata: { systemStatus: `Rerouting to ${plan[i+1]}...`, isRerouting: true } };
-        }
-    }
 
-    // FALLBACK IF ALL FAILED
-    if (!hasYielded) {
-         if (attempts === 0) {
-             yield { text: `\n\n> ⚠️ **SYSTEM HALT: NO API KEYS DETECTED**\n\nSistem tidak menemukan kunci API lokal dan Backend Proxy gagal dihubungi.` };
-        } else {
-             yield { text: `\n\n> ⚠️ **CONNECTION FAILURE**\n\nSemua provider AI (${attempts}) gagal merespons. Periksa koneksi internet.` };
+            if (!response.body) throw new Error("No response body");
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunkText = decoder.decode(value, { stream: true });
+                fullText += chunkText;
+                yield { text: chunkText };
+            }
+
+            this.updateHistory(msg, fullText);
+            return; 
+        } 
+        
+        // --- FALLBACK / OTHER PROVIDERS (Client-Side Dev Keys) ---
+        // Only reaches here if provider is NOT Gemini (e.g. OpenAI/Groq using VITE_ keys)
+        const key = GLOBAL_VAULT.getKey(model.provider as Provider);
+        if (!key) throw new Error(`No API Key found for ${model.provider}`);
+
+        const isThinking = model.specs.speed === 'THINKING';
+        const activeTools = configOverride?.tools || this.getActiveTools(model.provider, isThinking, msg);
+        
+        // Fallback for non-Gemini models (OpenAI/Groq) running client-side
+        const stream = streamOpenAICompatible(model.provider as any, model.id, [{ role: 'user', content: msg }], systemPrompt, activeTools, signal);
+        let fullText = "";
+        
+        for await (const chunk of stream) {
+            if (signal?.aborted) break;
+            if (chunk.text) { 
+                fullText += chunk.text; 
+                yield { text: chunk.text }; 
+            }
+            if (chunk.functionCall) {
+                yield { functionCall: chunk.functionCall };
+            }
         }
+        this.updateHistory(msg, fullText);
+
+    } catch (err: any) {
+        debugService.log('ERROR', 'KERNEL', 'EXEC_FAIL', err.message);
+        yield { text: `\n\n> ⚠️ **SYSTEM ERROR**: ${err.message || "Connection failed"}` };
+        yield { metadata: { status: 'error' } };
     }
   }
 

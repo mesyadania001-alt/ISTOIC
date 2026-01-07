@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { STOIC_KERNEL as SK } from '../../../services/stoicKernel';
@@ -48,17 +47,19 @@ export const useAIStream = ({
         targetPersona: 'hanisah' | 'stoic',
         attachment?: { data: string, mimeType: string }
     ) => {
+        // 1. OPTIMISTIC UI: Force UI Update immediately
         setIsLoading(true);
         const modelMessageId = uuidv4();
         const transmissionId = uuidv4().slice(0,8);
         
         console.group(`🧠 NEURAL_LINK_TRANSMISSION: ${transmissionId}`);
 
-        // 1. Create Placeholder for AI Response using STORAGE (Safe Update)
+        // A. Insert User Message is handled by caller (useChatLogic) usually, 
+        // but we ensure the Model Placeholder is added synchronously here.
         storage.addMessage(targetThreadId, { 
             id: modelMessageId, 
             role: 'model', 
-            text: '', 
+            text: '', // Start empty
             metadata: { status: 'success', model: activeModel.name, provider: activeModel.provider } 
         });
 
@@ -66,14 +67,12 @@ export const useAIStream = ({
         abortControllerRef.current = controller;
         const signal = controller.signal;
 
-        // Define variables OUTSIDE try block so they are accessible in catch
         let accumulatedText = "";
-        let chunkCount = 0;
 
         try {
             const kernel = targetPersona === 'hanisah' ? HK : SK;
             
-            // Pass original 'notes' array
+            // 2. Start Stream
             const stream = kernel.streamExecute(
                 userMsg || "Proceed with attachment analysis.", 
                 activeModel.id, 
@@ -87,14 +86,14 @@ export const useAIStream = ({
 
                 if (chunk.text) {
                     accumulatedText += chunk.text;
-                    chunkCount++;
                 }
 
+                // Handle Tool Calls
                 if (chunk.functionCall) {
                     const toolName = chunk.functionCall.name;
                     accumulatedText += `\n\n> ⚙️ **EXECUTING:** ${toolName.replace(/_/g, ' ').toUpperCase()}...\n`;
                     
-                    // Update UI with progress via STORAGE
+                    // Force update UI during tool execution so user sees progress
                     storage.updateMessage(targetThreadId, modelMessageId, { text: accumulatedText });
 
                     try {
@@ -107,29 +106,26 @@ export const useAIStream = ({
                     } catch (toolError: any) {
                         accumulatedText += `> ❌ **FAIL:** ${toolError.message}\n\n`;
                     }
-                    chunkCount++;
                 }
 
-                // Stream Update via STORAGE (Prevents race conditions with user message)
+                // 3. Real-time Update: Update the existing message ID content
                 storage.updateMessage(targetThreadId, modelMessageId, { 
                     text: accumulatedText,
                     metadata: { 
-                        // We need to merge metadata carefully
                         ...(chunk.metadata || {}),
                         groundingChunks: chunk.groundingChunks
                     }
                 });
             }
 
-            // Fallback for empty response
-            if (!accumulatedText.trim() && chunkCount === 0) {
+            // Fallback for empty response (if API returned 200 but empty body)
+            if (!accumulatedText.trim()) {
                 accumulatedText = targetPersona === 'hanisah' 
                     ? "_ (tersenyum) _\n\n*Hmm, aku blank bentar. Coba tanya lagi?*" 
-                    : "> **NULL OUTPUT DETECTED**\n\nThe logic stream yielded no data. Refine parameters.";
+                    : "> **NULL OUTPUT DETECTED**\n\nThe logic stream yielded no data.";
                 storage.updateMessage(targetThreadId, modelMessageId, { text: accumulatedText });
             }
 
-            // TTS Trigger
             if (isAutoSpeak && accumulatedText) {
                 speakWithHanisah(accumulatedText.replace(/[*#_`]/g, ''), targetPersona === 'hanisah' ? 'Hanisah' : 'Fenrir');
             }
@@ -137,21 +133,17 @@ export const useAIStream = ({
         } catch (err: any) {
              console.error(`[${transmissionId}] ERROR:`, err);
              let errorText = "";
-             let status: 'error' | 'success' = 'success';
              
              if (err.message === "ABORTED_BY_USER" || err.name === "AbortError") {
                 errorText = `\n\n> 🛑 **INTERRUPTED**`;
              } else {
-                 status = 'error';
-                 errorText = targetPersona === 'hanisah' 
-                    ? `\n\n_ (Menggaruk kepala) _\n*Aduh, maaf banget sayang. Sinyalnya lagi ngajak berantem nih.*` 
-                    : `\n\n> **SYSTEM ANOMALY DETECTED**\n\nProcessing stream interrupted.`;
+                 // 4. Error State: Don't remove message, append error
+                 errorText = `\n\n> ⚠️ **NETWORK ERROR**: ${err.message}`;
              }
              
-             // Append error to whatever text we got
              storage.updateMessage(targetThreadId, modelMessageId, { 
                  text: accumulatedText + errorText, 
-                 metadata: { status: status } 
+                 metadata: { status: 'error' } 
              });
         } finally {
             setIsLoading(false);
