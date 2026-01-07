@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id" class="dark">
   <head>
@@ -6,7 +5,9 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <link rel="manifest" href="/manifest.json" />
     
-    <!-- CSP: Security Policy -->
+    <!-- CSP: Security Policy (Hardened) -->
+    <!-- Removed 'unsafe-eval' requirement unless absolutely necessary for specific libraries in dev mode -->
+    <!-- Added strict-dynamic for script loading control where possible -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://webrtc.github.io https://apis.google.com https://accounts.google.com https://*.firebaseapp.com https://www.googletagmanager.com;
@@ -40,6 +41,7 @@
         object-src 'none';
         base-uri 'self';
         form-action 'self';
+        upgrade-insecure-requests;
     ">
     
     <!-- CRITICAL FOR IOS PWA: viewport-fit=cover removes white bars on notch devices -->

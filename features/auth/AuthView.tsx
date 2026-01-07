@@ -21,12 +21,20 @@ interface AuthViewProps {
 // Updated Auth Stages
 type AuthStage = 'CHECKING' | 'WELCOME' | 'CREATE_ID' | 'SETUP_PIN' | 'LOCKED' | 'BIOMETRIC_SCAN' | 'REGISTER_MANUAL' | 'FORGOT_PIN' | 'FORGOT_ACCOUNT';
 
+// SECURITY CONSTANTS
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 Minutes
+
 export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
     // --- GLOBAL STATE ---
     const [identity, setIdentity] = useLocalStorage<IStokUserIdentity | null>('istok_user_identity', null);
     const [isPinSet, setIsPinSet] = useState(isSystemPinConfigured());
     const [bioEnabled, setBioEnabled] = useLocalStorage<boolean>('bio_auth_enabled', false);
     
+    // --- SECURITY PERSISTENCE ---
+    const [failedAttempts, setFailedAttempts] = useLocalStorage<number>('auth_failed_count', 0);
+    const [lockoutUntil, setLockoutUntil] = useLocalStorage<number>('auth_lockout_until', 0);
+
     // --- UI STATE ---
     const [stage, setStage] = useState<AuthStage>('CHECKING');
     const [loading, setLoading] = useState(false);
@@ -39,11 +47,31 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
     const [pinInput, setPinInput] = useState('');
     
     // --- LOCKOUT LOGIC ---
-    const [attempts, setAttempts] = useState(0);
     const [isHardLocked, setIsHardLocked] = useState(false);
     const [countdown, setCountdown] = useState(0);
 
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // --- SECURITY CHECK ON MOUNT ---
+    useEffect(() => {
+        const checkLockout = () => {
+            const now = Date.now();
+            if (lockoutUntil > now) {
+                setIsHardLocked(true);
+                setCountdown(Math.ceil((lockoutUntil - now) / 1000));
+            } else {
+                if (isHardLocked) {
+                    setIsHardLocked(false);
+                    setFailedAttempts(0);
+                    setLockoutUntil(0);
+                }
+            }
+        };
+
+        checkLockout();
+        const interval = setInterval(checkLockout, 1000);
+        return () => clearInterval(interval);
+    }, [lockoutUntil, isHardLocked]);
 
     // --- SMART AUTO FLOW ---
     useEffect(() => {
@@ -53,7 +81,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             // 1. FAST PATH: Identity already in Storage
             if (identity && identity.istokId) {
                 if (isSystemPinConfigured()) {
-                    if (bioEnabled) {
+                    if (bioEnabled && !isHardLocked) {
                         setStage('BIOMETRIC_SCAN');
                         handleBiometricScan();
                     } else {
@@ -109,11 +137,14 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
 
     // --- BIOMETRIC HANDLER ---
     const handleBiometricScan = async () => {
+        if (isHardLocked) return;
+        
         setBioStatus("SCANNING FACE ID...");
         try {
             const success = await BiometricService.authenticate();
             if (success) {
                 setBioStatus("AUTHORIZED");
+                setFailedAttempts(0); // Reset on success
                 setTimeout(onAuthSuccess, 500); 
             } else {
                 setBioStatus("FAILED");
@@ -207,7 +238,6 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         setLoading(true);
         
         // Artificial delay for security feel & brute force prevention
-        // Skip delay if it looks like a dev pin (optimization) but kept for "feel"
         await new Promise(r => setTimeout(r, 600));
 
         // 1. CHECK MASTER KEY (DEVELOPER BYPASS)
@@ -223,13 +253,12 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                 photoURL: 'https://ui-avatars.com/api/?name=Dev&background=10b981&color=fff'
             };
             
-            // Only overwrite if we don't have a valid identity or user wants to force dev entry
-            // For now, we assume Master Key grants access to current data OR sets up Dev mode if blank.
             if (!identity || !identity.istokId) {
                  setIdentity(devIdentity);
             }
             
-            // Success
+            // Reset counters
+            setFailedAttempts(0);
             onAuthSuccess();
             setLoading(false);
             return;
@@ -238,27 +267,21 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         // 2. CHECK USER PIN
         const isValid = await verifySystemPin(pinInput);
         if (isValid) {
+            setFailedAttempts(0);
             onAuthSuccess();
         } else {
-            setAttempts(p => p + 1);
-            setError("INVALID PASSCODE");
+            const newCount = failedAttempts + 1;
+            setFailedAttempts(newCount);
             setPinInput('');
             setShake(true); setTimeout(() => setShake(false), 500);
             
-            if (attempts >= 3) {
+            if (newCount >= MAX_ATTEMPTS) {
+                // Trigger Hard Lockout
+                setLockoutUntil(Date.now() + LOCKOUT_DURATION_MS);
                 setIsHardLocked(true);
-                setCountdown(30);
-                const interval = setInterval(() => {
-                    setCountdown(prev => {
-                        if (prev <= 1) {
-                            clearInterval(interval);
-                            setIsHardLocked(false);
-                            setAttempts(0);
-                            return 0;
-                        }
-                        return prev - 1;
-                    });
-                }, 1000);
+                setError(`SYSTEM LOCKED FOR ${LOCKOUT_DURATION_MS/60000} MINS`);
+            } else {
+                setError(`INVALID PASSCODE (${MAX_ATTEMPTS - newCount} attempts left)`);
             }
         }
         setLoading(false);
@@ -384,7 +407,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                     {stage === 'FORGOT_PIN' && (
                         <ForgotPin 
                             onBack={() => setStage('LOCKED')}
-                            onSuccess={() => { setStage('LOCKED'); setIsPinSet(true); }}
+                            onSuccess={() => { setStage('LOCKED'); setIsPinSet(true); setFailedAttempts(0); }}
                         />
                     )}
 
@@ -458,8 +481,11 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                             <div className="space-y-4">
                                 {isHardLocked ? (
                                     <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
-                                        <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">SYSTEM_LOCKED</p>
-                                        <p className="text-2xl font-mono text-white font-bold">00:{countdown.toString().padStart(2,'0')}</p>
+                                        <div className="flex flex-col items-center gap-2">
+                                            <ShieldAlert size={24} className="text-red-500" />
+                                            <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">SECURITY LOCKOUT</p>
+                                        </div>
+                                        <p className="text-2xl font-mono text-white font-bold mt-2">00:{Math.floor(countdown / 60).toString().padStart(2,'0')}:{Math.floor(countdown % 60).toString().padStart(2,'0')}</p>
                                     </div>
                                 ) : (
                                     <input 
@@ -471,6 +497,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                                         className={`w-full bg-[#121214] border rounded-2xl py-5 text-center text-3xl font-black text-white tracking-[0.5em] focus:outline-none transition-all placeholder:text-neutral-800 ${error ? 'border-red-500/50' : 'border-white/10 focus:border-emerald-500'}`}
                                         placeholder="••••••"
                                         disabled={loading}
+                                        autoComplete="off"
                                     />
                                 )}
                                 {error && !isHardLocked && <p className="text-center text-[10px] text-red-500 font-bold tracking-widest">{error}</p>}
@@ -486,6 +513,17 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                                         {loading ? <Loader2 className="animate-spin"/> : <ArrowRight />} BUKA
                                     </button>
                                     
+                                    {/* RETRY FACE ID BUTTON - Added Requirement */}
+                                    {bioEnabled && (
+                                        <button 
+                                            type="button"
+                                            onClick={handleBiometricScan}
+                                            className="w-full py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 border border-emerald-500/30"
+                                        >
+                                            <ScanFace size={16} /> RETRY FACE ID
+                                        </button>
+                                    )}
+
                                     <div className="flex justify-between items-center px-1">
                                         <button 
                                             type="button" 
