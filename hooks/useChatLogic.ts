@@ -5,7 +5,7 @@ import { useIDB } from '../../../hooks/useIDB';
 import { type ChatThread, type ChatMessage, type Note } from '../../../types';
 import { MODEL_CATALOG, HANISAH_KERNEL } from '../../../services/melsaKernel';
 import { STOIC_KERNEL } from '../../../services/stoicKernel';
-import { executeNeuralTool } from '../services/toolHandler';
+import { executeNeuralTool } from '../features/aiChat/services/toolHandler';
 import { speakWithHanisah } from '../../../services/elevenLabsService';
 import { useVault } from '../../../contexts/VaultContext';
 import { debugService } from '../../../services/debugService';
@@ -166,7 +166,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
             
             setThreads(prev => prev.map(t => t.id === targetId ? {
                 ...t,
-                messages: t.messages.map(m => m.id === modelMessageId ? {
+                messages: t.messages.map(m => m.id === modelMsgId ? {
                     ...m,
                     text: `Here is your creation based on "${promptText}":\n\n![Generated Image](${result.url})\n\n_Engine: ${result.model.toUpperCase()}_`
                 } : m)
@@ -174,7 +174,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         } catch (e) {
             setThreads(prev => prev.map(t => t.id === targetId ? {
                 ...t,
-                messages: t.messages.map(m => m.id === modelMessageId ? {
+                messages: t.messages.map(m => m.id === modelMsgId ? {
                     ...m,
                     text: `⚠️ **GENERATION FAILED**: ${(e as any).message}`
                 } : m)

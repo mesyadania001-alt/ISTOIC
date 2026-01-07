@@ -1,3 +1,4 @@
+
 import React, { type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Terminal, ZapOff, Copy, Check, ShieldAlert } from 'lucide-react';
 import { debugService } from '../services/debugService';
@@ -54,15 +55,14 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             }
         );
         KEY_MANAGER.reportFailure('GEMINI', 'UNKNOWN_KEY', error);
-    } else {
-        debugService.log(
-          'ERROR', 
-          `BOUNDARY_${view}`, 
-          'CRASH', 
-          error.message,
-          { componentStack: errorInfo.componentStack }
-        );
-    }
+    } 
+
+    // REPORT TO EXTERNAL ANALYTICS (SENTRY / FIREBASE)
+    debugService.reportToExternal(error, {
+        viewName: view,
+        componentStack: errorInfo.componentStack,
+        isFatal: isGeminiFatal
+    });
     
     console.error("Uncaught error in module:", view, error);
   }

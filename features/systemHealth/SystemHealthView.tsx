@@ -401,8 +401,8 @@ export const SystemHealthView: React.FC = () => {
                             <div className="flex items-center gap-2">
                                 <button 
                                     onClick={toggleStreamFreeze} 
-                                    className={`p-1.5 rounded border transition-all ${isStreamFrozen ? 'bg-amber-500/20 border-amber-500 text-amber-500' : 'border-white/10 text-neutral-500 hover:text-white'}`}
-                                    title={isFrozen ? "Resume Stream" : "Pause Stream"}
+                                    className={`p-1.5 rounded-lg border transition-all ${isStreamFrozen ? 'bg-amber-500/20 border-amber-500 text-amber-500' : 'border-white/10 text-neutral-500 hover:text-white'}`}
+                                    title={isStreamFrozen ? "Resume Stream" : "Pause Stream"}
                                 >
                                     {isStreamFrozen ? <Play size={10} fill="currentColor"/> : <Pause size={10} />}
                                 </button>

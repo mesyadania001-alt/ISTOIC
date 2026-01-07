@@ -96,6 +96,7 @@ export const IStokView: React.FC<IStokViewProps> = ({ onLogout, globalPeer, init
     const [isConnected, setIsConnected] = useState(false); // Means "Chat UI Active"
     const [isPeerAlive, setIsPeerAlive] = useState(false); // Global Peer Status
     const [isDataConnectionAlive, setIsDataConnectionAlive] = useState(false); // Specific Chat Connection Status
+    const [isNetworkOnline, setIsNetworkOnline] = useState(navigator.onLine);
     
     // Chat Data
     const [messages, setMessages] = useState<Message[]>([]);
@@ -125,6 +126,11 @@ export const IStokView: React.FC<IStokViewProps> = ({ onLogout, globalPeer, init
     useEffect(() => {
         activatePrivacyShield();
         
+        const handleOnline = () => setIsNetworkOnline(true);
+        const handleOffline = () => setIsNetworkOnline(false);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
         if (!identity || !identity.istokId) {
             onLogout();
             return;
@@ -168,7 +174,11 @@ export const IStokView: React.FC<IStokViewProps> = ({ onLogout, globalPeer, init
             setAccessPin(urlParams.get('key')!);
         }
 
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
     }, [identity, globalPeer]);
 
     // AUTO RECONNECT LOGIC FOR CHAT SESSION
@@ -383,10 +393,43 @@ export const IStokView: React.FC<IStokViewProps> = ({ onLogout, globalPeer, init
     };
 
     const sendMessage = async (type: string, content: string, extraData: any = {}) => {
+        // IMPROVED OFFLINE HANDLING
+        // If offline, create pending message and allow it to sit in UI with Clock Icon.
+        if (!isNetworkOnline) {
+             const pendingMsg = { 
+                 id: crypto.randomUUID(), 
+                 type, 
+                 content, 
+                 timestamp: Date.now(), 
+                 ttl: ttlMode, 
+                 ...extraData, 
+                 sender: 'ME', 
+                 status: 'PENDING' 
+             };
+             
+             // Update local UI immediately
+             setMessages(prev => [...prev, pendingMsg as Message]);
+             
+             // Try to register background sync if available
+             if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                 try {
+                     const reg = await navigator.serviceWorker.ready;
+                     // @ts-ignore
+                     await reg.sync.register('sync-pending-messages');
+                     console.log("Background Sync registered.");
+                 } catch (e) {
+                     console.warn("Sync registration failed", e);
+                 }
+             }
+             
+             return;
+        }
+
         if (!connRef.current || !isDataConnectionAlive) {
             alert("Koneksi terputus. Mencoba menghubungkan kembali...");
             return;
         }
+
         const msgPayload = { id: crypto.randomUUID(), type, content, timestamp: Date.now(), ttl: ttlMode, ...extraData };
         const strPayload = JSON.stringify(msgPayload);
         const encrypted = await encryptData(strPayload, accessPin);
@@ -649,6 +692,16 @@ export const IStokView: React.FC<IStokViewProps> = ({ onLogout, globalPeer, init
                      </div>
                  </div>
              )}
+             
+             {/* OFFLINE INDICATOR OVERLAY */}
+             {!isNetworkOnline && (
+                 <div className="absolute top-20 left-0 right-0 z-10 flex justify-center pointer-events-none">
+                     <div className="bg-amber-500/10 backdrop-blur-md border border-amber-500/20 px-4 py-2 rounded-full flex items-center gap-2 text-amber-500 text-xs font-bold shadow-lg animate-pulse">
+                         <CloudOff size={12} />
+                         OFFLINE MODE - QUEUED
+                     </div>
+                 </div>
+             )}
 
              {/* Messages */}
              <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scroll">
@@ -668,7 +721,7 @@ export const IStokView: React.FC<IStokViewProps> = ({ onLogout, globalPeer, init
                 onSend={(txt: string) => sendMessage('TEXT', txt)}
                 onSendFile={() => fileInputRef.current?.click()}
                 onSendAudio={(b64: string, dur: number) => sendMessage('AUDIO', b64, { duration: dur })}
-                disabled={!isDataConnectionAlive}
+                disabled={!isDataConnectionAlive && isNetworkOnline} // Allow input if offline to queue, but disable if trying to connect
                 ttlMode={ttlMode}
                 onToggleTtl={() => setTtlMode(p => p === 0 ? 30 : 0)}
                 onAiAssist={handleAiSmartCompose} 

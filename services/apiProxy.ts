@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 import { debugService } from './debugService';
 import { HANISAH_KERNEL } from './melsaKernel';
@@ -30,8 +29,8 @@ export const NoteSchema = z.object({
   title: z.string().min(1),
   content: z.string(),
   tags: z.array(z.string()),
-  created: z.string().datetime(),
-  updated: z.string().datetime(),
+  created: z.string(),
+  updated: z.string(),
   is_pinned: z.boolean().default(false),
   is_archived: z.boolean().default(false),
   tasks: z.array(z.object({
@@ -47,6 +46,34 @@ export type ValidatedNote = z.infer<typeof NoteSchema>;
 // Configuration from Environment
 const USE_SECURE_BACKEND = (import.meta as any).env.VITE_USE_SECURE_BACKEND === 'true';
 const BACKEND_URL = (import.meta as any).env.VITE_BACKEND_URL || '/api/chat';
+
+// --- RELIABILITY UTILITIES ---
+
+/**
+ * Retries a fetch operation with exponential backoff.
+ * @param url Request URL
+ * @param options Fetch options
+ * @param retries Max retries (default 3)
+ * @param backoffMs Initial backoff in ms (default 1000)
+ */
+async function fetchWithBackoff(url: string, options: RequestInit, retries = 3, backoffMs = 1000): Promise<Response> {
+  try {
+    const res = await fetch(url, options);
+    // Retry on Server Errors (5xx) but not Client Errors (4xx)
+    if (!res.ok && res.status >= 500) {
+      throw new Error(`Server Error: ${res.status}`);
+    }
+    return res;
+  } catch (err) {
+    if (retries <= 1) throw err;
+    
+    // Log retry attempt
+    debugService.log('WARN', 'PROXY', 'RETRY', `Network/Server fail. Retrying in ${backoffMs}ms...`, { url, retriesLeft: retries - 1 });
+    
+    await new Promise(resolve => setTimeout(resolve, backoffMs));
+    return fetchWithBackoff(url, options, retries - 1, backoffMs * 2);
+  }
+}
 
 // 2. The Proxy Service
 class ApiProxyService {
@@ -67,7 +94,8 @@ class ApiProxyService {
     // STRATEGY A: SECURE BACKEND (RECOMMENDED FOR PRODUCTION)
     if (USE_SECURE_BACKEND) {
         try {
-            const response = await fetch(BACKEND_URL, {
+            // Updated to use Retry Logic
+            const response = await fetchWithBackoff(BACKEND_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
