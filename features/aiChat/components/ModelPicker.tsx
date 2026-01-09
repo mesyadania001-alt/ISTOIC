@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     X, Sparkles, Cpu, Zap, Globe, Layers, Brain, Activity, 
     Box, Wind, Gauge, Database, CircuitBoard, CheckCircle2,
@@ -16,7 +16,7 @@ interface ModelPickerProps {
   onSelectModel: (id: string) => void;
 }
 
-const TechStatBar: React.FC<{ label: string; value: number; max: number; color: string }> = ({ label, value, max, color }) => {
+const TechStatBar: React.FC<{ label: string; value: number; max: number; color: string }> = React.memo(({ label, value, max, color }) => {
     const segments = 12;
     const filledSegments = Math.round((value / max) * segments);
     
@@ -38,9 +38,9 @@ const TechStatBar: React.FC<{ label: string; value: number; max: number; color: 
             </div>
         </div>
     );
-};
+});
 
-const StatusBadge: React.FC<{ status: 'HEALTHY' | 'COOLDOWN' | 'OFFLINE'; cooldown?: number }> = ({ status, cooldown }) => {
+const StatusBadge: React.FC<{ status: 'HEALTHY' | 'COOLDOWN' | 'OFFLINE'; cooldown?: number }> = React.memo(({ status, cooldown }) => {
     if (status === 'HEALTHY') {
         return (
             <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/5 border border-emerald-500/20 text-emerald-500">
@@ -63,47 +63,7 @@ const StatusBadge: React.FC<{ status: 'HEALTHY' | 'COOLDOWN' | 'OFFLINE'; cooldo
             <span className="text-[7px] font-black uppercase tracking-wider">OFFLINE</span>
         </div>
     );
-};
-
-const ThinkingSlider: React.FC = () => {
-    const [budget, setBudget] = useState(4096);
-
-    useEffect(() => {
-        const stored = localStorage.getItem('thinking_budget');
-        if (stored) setBudget(parseInt(stored));
-    }, []);
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = parseInt(e.target.value);
-        setBudget(val);
-        localStorage.setItem('thinking_budget', val.toString());
-    };
-
-    return (
-        <div className="mt-4 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
-            <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-2 text-indigo-400">
-                    <Brain size={14} />
-                    <span className="text-[9px] font-black uppercase tracking-widest">THINKING_BUDGET</span>
-                </div>
-                <span className="text-[10px] font-mono font-bold text-white">{budget} TOKENS</span>
-            </div>
-            <input 
-                type="range" 
-                min="1024" 
-                max="32768" 
-                step="1024" 
-                value={budget} 
-                onChange={handleChange}
-                className="w-full h-1.5 bg-black/20 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-            />
-            <div className="flex justify-between mt-1 text-[7px] text-neutral-500 font-mono">
-                <span>1K (FAST)</span>
-                <span>32K (DEEP)</span>
-            </div>
-        </div>
-    );
-};
+});
 
 export const ModelPicker: React.FC<ModelPickerProps> = ({
   isOpen,
@@ -115,7 +75,9 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   const [statuses, setStatuses] = useState<ProviderStatus[]>([]);
   const { features } = useFeatures(); 
   const [visibleTabs, setVisibleTabs] = useState<string[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Status and Tab initialization
   useEffect(() => {
       if (isOpen) {
           const update = () => setStatuses(KEY_MANAGER.getAllProviderStatuses());
@@ -151,9 +113,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
               if (interval) clearInterval(interval);
           };
       }
-  }, [isOpen, features.AUTO_DIAGNOSTICS, activeTab]);
-
-  if (!isOpen) return null;
+  }, [isOpen, features.AUTO_DIAGNOSTICS]);
 
   const tabs = {
     'AUTO': {
@@ -219,18 +179,32 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
   };
 
   const currentTab = tabs[activeTab];
-  const hasThinkingModels = currentTab?.models.some(m => m.specs.speed === 'THINKING');
+
+  // Prevent scroll propagation
+  useEffect(() => {
+    if (isOpen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = '';
+    return () => { document.body.style.overflow = ''; };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-end md:items-center justify-center p-0 md:p-4 animate-fade-in font-sans">
+    <div className="fixed inset-0 z-[9999] flex items-end md:items-center justify-center p-0 md:p-4 font-sans h-full overflow-hidden">
+      {/* Backdrop with Hardware Acceleration */}
       <div 
-        className="absolute inset-0 bg-black/80 backdrop-blur-md transition-opacity" 
+        className="absolute inset-0 bg-black/80 backdrop-blur-md transition-opacity duration-300 animate-fade-in transform-gpu" 
         onClick={onClose}
       />
 
-      <div className="relative z-10 w-full md:max-w-5xl h-[92vh] md:h-[85vh] bg-[#050505] rounded-t-[32px] md:rounded-[24px] border-t md:border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden ring-1 ring-white/5 animate-slide-up">
+      {/* Main Card with Premium Animation */}
+      <div 
+        className="relative z-10 w-full md:max-w-5xl h-[92vh] md:h-[85vh] bg-[#050505] rounded-t-[32px] md:rounded-[24px] border-t md:border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden ring-1 ring-white/5 animate-slide-up transform-gpu transition-all duration-300 ease-out"
+        style={{ willChange: 'transform, opacity' }}
+      >
         
-        <div className="h-16 md:h-14 border-b border-white/5 bg-white/[0.02] flex items-center justify-between px-6 shrink-0">
+        {/* Header */}
+        <div className="h-16 md:h-14 border-b border-white/5 bg-white/[0.02] flex items-center justify-between px-6 shrink-0 backdrop-blur-sm">
             <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5 shadow-inner">
                     <Layers size={16} className="text-white" />
@@ -253,6 +227,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
         </div>
 
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+            {/* Sidebar Tabs */}
             <div className="w-full md:w-64 bg-[#08080a] border-b md:border-b-0 md:border-r border-white/5 flex flex-row md:flex-col p-2 gap-1 overflow-x-auto md:overflow-y-auto no-scrollbar shrink-0">
                 {visibleTabs.map((key) => {
                     const data = tabs[key as keyof typeof tabs];
@@ -269,7 +244,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
                             onClick={() => !isDisabled && setActiveTab(key as any)}
                             disabled={isDisabled}
                             className={`
-                                relative p-3 rounded-xl flex md:w-full items-center gap-3 transition-all group overflow-hidden border shrink-0 active:scale-95
+                                relative p-3 rounded-xl flex md:w-full items-center gap-3 transition-all duration-200 group overflow-hidden border shrink-0 active:scale-95
                                 ${isActive 
                                     ? 'bg-white/5 border-white/10 shadow-inner' 
                                     : 'bg-transparent border-transparent hover:bg-white/[0.02] hover:border-white/5'
@@ -304,10 +279,11 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
                 })}
             </div>
 
+            {/* Main Content */}
             <div className="flex-1 bg-[#09090b] relative flex flex-col min-h-0">
                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none mix-blend-overlay"></div>
-                <div className={`absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-${currentTab.accent.split('-')[1]}-500/10 to-transparent opacity-20 blur-[100px] pointer-events-none`}></div>
-
+                
+                {/* Description Header */}
                 <div className="p-6 md:p-8 pb-4 shrink-0 relative z-10">
                     <div className="flex items-end justify-between mb-2">
                         <h2 className={`text-3xl md:text-4xl font-black italic tracking-tighter uppercase text-white drop-shadow-md`}>
@@ -317,10 +293,9 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
                     <p className="text-[10px] text-neutral-400 font-mono uppercase tracking-[0.2em] border-l-2 border-white/10 pl-3 leading-relaxed max-w-lg">
                         {currentTab.desc}
                     </p>
-                    
-                    {hasThinkingModels && <ThinkingSlider />}
                 </div>
 
+                {/* Model Grid */}
                 <div className="flex-1 overflow-y-auto custom-scroll p-4 md:p-8 pt-0 relative z-10 pb-20">
                     <div className="grid grid-cols-1 gap-4">
                         {currentTab.models.map(model => (
@@ -328,7 +303,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
                                 key={model.id} 
                                 model={model} 
                                 isActive={model.id === activeModelId} 
-                                onClick={() => onSelectModel(model.id)} 
+                                onClick={() => { onSelectModel(model.id); }} 
                                 accent={currentTab.accent}
                                 statuses={statuses}
                             />
@@ -336,6 +311,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
                     </div>
                 </div>
 
+                {/* Footer Info */}
                 <div className="h-10 border-t border-white/5 bg-black/40 backdrop-blur-md flex items-center px-6 justify-between shrink-0 absolute bottom-0 left-0 right-0 z-20">
                     <div className="flex items-center gap-2 text-[8px] font-mono text-neutral-600 uppercase tracking-widest">
                         <Network size={10} />
@@ -358,7 +334,7 @@ const ArchitectureCard: React.FC<{
     onClick: () => void,
     accent: string,
     statuses: ProviderStatus[]
-}> = ({ model, isActive, onClick, accent, statuses }) => {
+}> = React.memo(({ model, isActive, onClick, accent, statuses }) => {
   
   const isAuto = model.id === 'auto-best';
   const providerStatus = statuses.find(s => s.id === model.provider);
@@ -445,4 +421,4 @@ const ArchitectureCard: React.FC<{
         </div>
     </button>
   );
-};
+});

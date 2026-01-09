@@ -77,17 +77,16 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
 
     const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
         if (messagesEndRef.current) {
+            // Tiny delay to allow DOM update
             setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' }); }, 50);
             isAutoScrolling.current = true;
             setShowScrollBtn(false);
         }
     }, []);
 
-    // Scroll button visibility logic
-    // Attached to Virtuoso scroller in ChatWindow ideally, but we simulate via a ref if possible or rely on simple behavior
-    // For now simplified: no manual scroll listener on window, Virtuoso handles its own scrolling.
-
-    useEffect(() => { if (isAutoScrolling.current) scrollToBottom(isLoading ? 'auto' : 'smooth'); }, [activeThread?.messages?.length, isLoading, scrollToBottom]);
+    // Manual scroll listener is handled within ChatWindow (Virtuoso) typically, 
+    // but if we want a global "New Message" button we'd need to hook into Virtuoso's state.
+    // For now, we rely on Virtuoso's followOutput prop in ChatWindow.
 
     if (!isThreadsLoaded) return <div className="h-full w-full flex flex-col items-center justify-center gap-4 bg-white dark:bg-[#0a0a0b] animate-fade-in"><Loader2 size={32} className="animate-spin text-[var(--accent-color)]" /><span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500 animate-pulse">RESTORING_MEMORY_BANKS...</span></div>;
 
@@ -116,10 +115,10 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const isHydraActive = activeModel?.id === 'auto-best';
 
     return (
-        <div className={`h-[100dvh] w-full relative bg-noise overflow-hidden flex flex-col ${bgGradient}`}>
+        <div className={`h-[100dvh] w-full relative bg-noise overflow-hidden flex flex-col ${bgGradient}`} style={{ overscrollBehavior: 'contain' }}>
             <VaultPinModal isOpen={showPinModal} onClose={() => setShowPinModal(false)} onSuccess={() => setIsVaultSynced(true)} />
             
-            {/* --- 1. HEADER (FIXED) --- */}
+            {/* --- 1. HEADER (FIXED TOP) --- */}
             <header className="shrink-0 z-50 flex justify-center pt-[env(safe-area-inset-top)] px-4 w-full">
                 <div className={`mt-2 backdrop-blur-2xl border rounded-[20px] p-1.5 flex items-center justify-between gap-1 shadow-sm ring-1 transition-all duration-500 ${isHydraActive ? 'bg-black/80 dark:bg-zinc-900/90 border-emerald-500/30 ring-emerald-500/20 shadow-emerald-500/5' : 'bg-white/80 dark:bg-[#0f0f11]/90 border-black/5 dark:border-white/10 ring-black/5 dark:ring-white/5'}`}>
                     <button className={`flex items-center gap-2 group py-1.5 px-3 rounded-xl transition-all cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 active:scale-95`} onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_BTN_MODEL_PICKER, FN_REGISTRY.CHAT_SELECT_MODEL, 'OPEN'); setShowModelPicker(true); }}>
