@@ -19,6 +19,7 @@ interface AIProviderInfoProps {
 }
 
 export const AIProviderInfo: React.FC<AIProviderInfoProps> = ({ metadata, isHydra, className = "" }) => {
+    // If no metadata is present, do not render anything
     if (!metadata || (!metadata.provider && !metadata.model)) return null;
 
     const provider = (metadata.provider || 'UNKNOWN').toUpperCase();
@@ -48,17 +49,17 @@ export const AIProviderInfo: React.FC<AIProviderInfoProps> = ({ metadata, isHydr
     };
 
     return (
-        <div className={`flex items-center gap-2 mt-2 select-none opacity-80 hover:opacity-100 transition-opacity ${className}`}>
+        <div className={`flex items-center flex-wrap gap-2 mt-3 select-none ${className}`}>
             
             {/* MAIN BADGE */}
             <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border backdrop-blur-md ${getTheme()}`}>
                 {getProviderIcon()}
                 
                 <div className="flex flex-col leading-none gap-0.5">
-                    <span className="text-[9px] font-black uppercase tracking-wider">
+                    <span className="text-[8px] font-black uppercase tracking-wider opacity-80">
                         {isHydra ? 'HYDRA_NODE' : provider}
                     </span>
-                    <span className="text-[7px] font-mono opacity-70 truncate max-w-[150px]">
+                    <span className="text-[9px] font-bold font-mono tracking-tight max-w-[150px] truncate">
                         {model}
                     </span>
                 </div>

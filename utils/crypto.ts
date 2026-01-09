@@ -13,7 +13,7 @@ const dec = new TextDecoder();
 const getPasswordKey = (password: string) => 
   crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
 
-const deriveKey = async (passwordKey: CryptoKey, salt: Uint8Array, usage: ["encrypt"] | ["decrypt"]) => 
+const deriveKey = async (passwordKey: CryptoKey, salt: BufferSource, usage: ["encrypt"] | ["decrypt"]) => 
   crypto.subtle.deriveKey(
     {
       name: "PBKDF2",

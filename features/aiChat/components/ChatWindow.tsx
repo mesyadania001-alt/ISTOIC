@@ -3,8 +3,7 @@ import React, { memo, useState, useMemo, useEffect, useRef } from 'react';
 import Markdown from 'react-markdown';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { 
-    Flame, Brain, ExternalLink, Sparkles, 
-    Box, ArrowRight, Copy, Check, ChevronDown,
+    Flame, Brain, ExternalLink, ArrowRight, Copy, Check, ChevronDown,
     Image as ImageIcon, RefreshCw, Search,
     Network, BrainCircuit, Infinity, AlertTriangle
 } from 'lucide-react';
@@ -161,7 +160,11 @@ const MessageBubble = memo(({ msg, personaMode, isLoading, onUpdateMessage }: { 
     const isRerouting = msg.metadata?.isRerouting;
     
     const textContent: string = useMemo(() => {
-        if (typeof msg.text === 'string' && msg.text) return msg.text as string;
+        const rawText = msg.text;
+        if (typeof rawText === 'string' && rawText) return rawText;
+        // Blob cannot be rendered directly as text, return empty or fallback
+        if (rawText instanceof Blob) return ''; 
+        
         const anyMsg = msg as any;
         if (typeof anyMsg.content === 'string') return anyMsg.content;
         if (anyMsg.parts && anyMsg.parts[0]?.text) return anyMsg.parts[0].text; 
@@ -278,10 +281,13 @@ const MessageBubble = memo(({ msg, personaMode, isLoading, onUpdateMessage }: { 
     const prevText = typeof prev.msg.text === 'string' ? prev.msg.text : ((prev.msg as any).content || '');
     const nextText = typeof next.msg.text === 'string' ? next.msg.text : ((next.msg as any).content || '');
     
+    // DEEP CHECK: Metadata
+    const prevMeta = JSON.stringify(prev.msg.metadata);
+    const nextMeta = JSON.stringify(next.msg.metadata);
+
     return prevText === nextText 
         && prev.isLoading === next.isLoading 
-        && prev.msg.metadata?.model === next.msg.metadata?.model
-        && prev.msg.metadata?.status === next.msg.metadata?.status;
+        && prevMeta === nextMeta;
 });
 
 // --- MAIN WINDOW ---
@@ -304,6 +310,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = memo(({ messages, personaMo
                 initialTopMostItemIndex={Math.max(0, allItems.length - 1)}
                 followOutput="auto"
                 alignToBottom
+                // Crucial: Add padding to bottom so last message isn't hidden by the input bar
+                components={{ 
+                    Footer: () => <div className="h-4" /> 
+                }}
                 atBottomThreshold={60}
                 overscan={200}
                 itemContent={(index, msg) => {

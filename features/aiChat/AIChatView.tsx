@@ -28,7 +28,7 @@ const PersonaToggle: React.FC<{ mode: 'hanisah' | 'stoic'; onToggle: () => void;
             className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300 ${mode === 'hanisah' ? 'bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-500' : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-500'}`}
         >
             <div className={`w-1.5 h-1.5 rounded-full ${mode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500'} animate-pulse`}></div>
-            <span className="text-[10px] font-black uppercase tracking-widest">{mode === 'hanisah' ? 'HANISAH' : 'AURELIUS'}</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">{mode === 'hanisah' ? 'HANISAH' : 'STOIC'}</span>
             <div className="w-[1px] h-3 bg-current opacity-20 mx-1"></div>
             {mode === 'hanisah' ? <Flame size={12} strokeWidth={2.5} /> : <Brain size={12} strokeWidth={2.5} />}
         </button>
@@ -83,22 +83,9 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
         }
     }, []);
 
-    useEffect(() => {
-        const container = document.getElementById('main-scroll-container');
-        if (!container) return;
-        const handleScroll = () => {
-            const { scrollTop, scrollHeight, clientHeight } = container;
-            if (scrollHeight - scrollTop - clientHeight > 300) {
-                isAutoScrolling.current = false;
-                setShowScrollBtn(true);
-            } else {
-                isAutoScrolling.current = true;
-                setShowScrollBtn(false);
-            }
-        };
-        container.addEventListener('scroll', handleScroll, { passive: true });
-        return () => container.removeEventListener('scroll', handleScroll);
-    }, []);
+    // Scroll button visibility logic
+    // Attached to Virtuoso scroller in ChatWindow ideally, but we simulate via a ref if possible or rely on simple behavior
+    // For now simplified: no manual scroll listener on window, Virtuoso handles its own scrolling.
 
     useEffect(() => { if (isAutoScrolling.current) scrollToBottom(isLoading ? 'auto' : 'smooth'); }, [activeThread?.messages?.length, isLoading, scrollToBottom]);
 
@@ -129,38 +116,12 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const isHydraActive = activeModel?.id === 'auto-best';
 
     return (
-        <div className={`h-[100dvh] w-full relative bg-noise overflow-hidden ${bgGradient}`}>
+        <div className={`h-[100dvh] w-full relative bg-noise overflow-hidden flex flex-col ${bgGradient}`}>
             <VaultPinModal isOpen={showPinModal} onClose={() => setShowPinModal(false)} onSuccess={() => setIsVaultSynced(true)} />
             
-            <div className="absolute inset-0 w-full h-full z-0" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 70px)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 110px)' }}>
-                <div className="w-full h-full relative px-4 md:px-0" id="main-scroll-container">
-                    {showEmptyState ? (
-                        <div className="flex flex-col h-full justify-center items-center w-full pb-10 animate-fade-in overflow-y-auto custom-scroll">
-                            <div className="text-center mb-10 space-y-4">
-                                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-[24px] mb-2 ${personaMode === 'hanisah' ? 'bg-orange-500/10 text-orange-500' : 'bg-cyan-500/10 text-cyan-500'}`}>
-                                    {personaMode === 'hanisah' ? <Flame size={32} /> : <Brain size={32} />}
-                                </div>
-                                <div>
-                                    <h2 className="text-4xl md:text-6xl font-black italic tracking-tighter text-black dark:text-white uppercase leading-none">{personaMode === 'hanisah' ? 'HANISAH' : 'AURELIUS'}</h2>
-                                    <p className="text-[10px] font-mono text-neutral-400 uppercase tracking-[0.3em]">{personaMode === 'hanisah' ? 'HYPER-INTUITIVE PARTNER' : 'STOIC STRATEGIC ADVISOR'}</p>
-                                </div>
-                            </div>
-                            <div className="w-full max-w-2xl mx-auto px-2 md:px-4 animate-slide-up relative z-20" style={{ animationDelay: '100ms' }}>
-                                <ChatInput input={input} setInput={setInput} isLoading={isLoading} onSubmit={sendMessage} onStop={stopGeneration} onNewChat={() => handleNewChat(personaMode)} onFocusChange={() => {}} aiName={personaMode === 'hanisah' ? 'HANISAH' : 'AURELIUS'} isVaultSynced={isVaultSynced} onToggleVaultSync={handleVaultToggle} personaMode={personaMode} isVaultEnabled={isVaultConfigEnabled} onTogglePersona={changePersona} variant="hero" onPollinations={generateWithPollinations} disableVisuals={isStoic} />
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl mx-auto px-2 md:px-4 mt-8 opacity-80">
-                                {!isStoic ? <SuggestionCard icon={<SparklesIcon />} label="GENERATE VISUAL" desc="Create high-fidelity images." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'GEN_IMG'); setInput("Generate a futuristic cyberpunk city with neon lights."); }} accent="text-pink-500 group-hover:text-pink-600" delay={150} /> : <SuggestionCard icon={<Brain />} label="FIRST PRINCIPLES" desc="Deconstruct complex problems." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'LOGIC'); setInput("Analyze this problem using First Principles thinking: [Insert Problem]"); }} accent="text-cyan-500 group-hover:text-cyan-600" delay={150} />}
-                                <SuggestionCard icon={<Code />} label="CODE AUDIT" desc="Debug & optimize algorithms." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'CODE_AUDIT'); setInput("Analyze this algorithm for complexity: [Paste Code]"); }} accent="text-emerald-500 group-hover:text-emerald-600" delay={200} />
-                            </div>
-                        </div>
-                    ) : (
-                        <ChatWindow key={activeThreadId || 'new'} messages={activeThread?.messages || []} personaMode={personaMode} isLoading={isLoading} messagesEndRef={messagesEndRef} onUpdateMessage={handleUpdateMessage} />
-                    )}
-                </div>
-            </div>
-
-            <div className="absolute top-0 left-0 w-full z-50 pointer-events-none flex justify-center pt-[env(safe-area-inset-top)] px-4">
-                <div className={`pointer-events-auto mt-2 backdrop-blur-2xl border rounded-[20px] p-1.5 flex items-center justify-between gap-1 shadow-sm ring-1 transition-all duration-500 ${isHydraActive ? 'bg-black/80 dark:bg-zinc-900/90 border-emerald-500/30 ring-emerald-500/20 shadow-emerald-500/5' : 'bg-white/80 dark:bg-[#0f0f11]/90 border-black/5 dark:border-white/10 ring-black/5 dark:ring-white/5'}`}>
+            {/* --- 1. HEADER (FIXED) --- */}
+            <header className="shrink-0 z-50 flex justify-center pt-[env(safe-area-inset-top)] px-4 w-full">
+                <div className={`mt-2 backdrop-blur-2xl border rounded-[20px] p-1.5 flex items-center justify-between gap-1 shadow-sm ring-1 transition-all duration-500 ${isHydraActive ? 'bg-black/80 dark:bg-zinc-900/90 border-emerald-500/30 ring-emerald-500/20 shadow-emerald-500/5' : 'bg-white/80 dark:bg-[#0f0f11]/90 border-black/5 dark:border-white/10 ring-black/5 dark:ring-white/5'}`}>
                     <button className={`flex items-center gap-2 group py-1.5 px-3 rounded-xl transition-all cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 active:scale-95`} onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_BTN_MODEL_PICKER, FN_REGISTRY.CHAT_SELECT_MODEL, 'OPEN'); setShowModelPicker(true); }}>
                         <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 ${isHydraActive ? 'text-emerald-500' : 'text-neutral-500 group-hover:text-black dark:group-hover:text-white'}`}>
                             {isHydraActive ? <Infinity size={14} className="animate-pulse" /> : <Zap size={14} />}
@@ -182,17 +143,47 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                         </button>
                     </div>
                 </div>
+            </header>
+
+            {/* --- 2. CHAT CONTENT (FLEXIBLE) --- */}
+            <div className="flex-1 min-h-0 relative w-full max-w-[900px] mx-auto pt-2" id="main-scroll-container">
+                {showEmptyState ? (
+                    <div className="flex flex-col h-full justify-center items-center w-full pb-20 animate-fade-in overflow-y-auto custom-scroll px-4">
+                        <div className="text-center mb-10 space-y-4">
+                            <div className={`inline-flex items-center justify-center w-16 h-16 rounded-[24px] mb-2 ${personaMode === 'hanisah' ? 'bg-orange-500/10 text-orange-500' : 'bg-cyan-500/10 text-cyan-500'}`}>
+                                {personaMode === 'hanisah' ? <Flame size={32} /> : <Brain size={32} />}
+                            </div>
+                            <div>
+                                <h2 className="text-4xl md:text-6xl font-black italic tracking-tighter text-black dark:text-white uppercase leading-none">{personaMode}</h2>
+                                <p className="text-[10px] font-mono text-neutral-400 uppercase tracking-[0.3em]">{personaMode === 'hanisah' ? 'HYPER-INTUITIVE PARTNER' : 'QUANTUM LOGIC KERNEL'}</p>
+                            </div>
+                        </div>
+                        
+                        {/* INPUT IN EMPTY STATE */}
+                         <div className="w-full max-w-2xl mx-auto animate-slide-up relative z-20" style={{ animationDelay: '100ms' }}>
+                            <ChatInput input={input} setInput={setInput} isLoading={isLoading} onSubmit={sendMessage} onStop={stopGeneration} onNewChat={() => handleNewChat(personaMode)} onFocusChange={() => {}} aiName={personaMode.toUpperCase()} isVaultSynced={isVaultSynced} onToggleVaultSync={handleVaultToggle} personaMode={personaMode} isVaultEnabled={isVaultConfigEnabled} onTogglePersona={changePersona} variant="hero" onPollinations={generateWithPollinations} disableVisuals={isStoic} />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl mx-auto mt-8 opacity-80">
+                            {!isStoic ? <SuggestionCard icon={<SparklesIcon />} label="GENERATE VISUAL" desc="Create high-fidelity images." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'GEN_IMG'); setInput("Generate a futuristic cyberpunk city with neon lights."); }} accent="text-pink-500 group-hover:text-pink-600" delay={150} /> : <SuggestionCard icon={<Brain />} label="FIRST PRINCIPLES" desc="Deconstruct complex problems." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'LOGIC'); setInput("Analyze this problem using First Principles thinking: [Insert Problem]"); }} accent="text-cyan-500 group-hover:text-cyan-600" delay={150} />}
+                            <SuggestionCard icon={<Code />} label="CODE AUDIT" desc="Debug & optimize algorithms." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'CODE_AUDIT'); setInput("Analyze this algorithm for complexity: [Paste Code]"); }} accent="text-emerald-500 group-hover:text-emerald-600" delay={200} />
+                        </div>
+                    </div>
+                ) : (
+                    <ChatWindow key={activeThreadId || 'new'} messages={activeThread?.messages || []} personaMode={personaMode} isLoading={isLoading} messagesEndRef={messagesEndRef} onUpdateMessage={handleUpdateMessage} />
+                )}
             </div>
 
+            {/* --- 3. INPUT (FIXED BOTTOM) --- */}
             {!showEmptyState && (
-                <div className={`absolute bottom-0 left-0 w-full z-50 pointer-events-none flex justify-center pb-[calc(env(safe-area-inset-bottom)+1rem)] px-4 md:px-0 transition-all duration-300 ${isMobileNavVisible ? 'mb-16' : ''}`}>
+                <div className={`shrink-0 z-50 w-full flex justify-center pb-[calc(env(safe-area-inset-bottom)+1rem)] px-4 md:px-0 transition-all duration-300 ${isMobileNavVisible ? 'mb-16' : ''}`}>
                     <div className="w-full max-w-[900px] pointer-events-auto relative">
                         {showScrollBtn && (
                             <button onClick={() => scrollToBottom()} className="absolute -top-16 right-0 z-20 w-10 h-10 rounded-full bg-white dark:bg-[#0a0a0b] shadow-xl border border-black/10 dark:border-white/10 flex items-center justify-center text-accent animate-bounce">
                                 <ArrowDown size={18} strokeWidth={2.5} />
                             </button>
                         )}
-                        <ChatInput input={input} setInput={setInput} isLoading={isLoading} onSubmit={sendMessage} onStop={stopGeneration} onNewChat={() => handleNewChat(personaMode)} onFocusChange={() => {}} aiName={personaMode === 'hanisah' ? 'HANISAH' : 'AURELIUS'} isVaultSynced={isVaultSynced} onToggleVaultSync={handleVaultToggle} personaMode={personaMode} isVaultEnabled={isVaultConfigEnabled} onTogglePersona={changePersona} variant="standard" onPollinations={generateWithPollinations} disableVisuals={isStoic} />
+                        <ChatInput input={input} setInput={setInput} isLoading={isLoading} onSubmit={sendMessage} onStop={stopGeneration} onNewChat={() => handleNewChat(personaMode)} onFocusChange={() => {}} aiName={personaMode.toUpperCase()} isVaultSynced={isVaultSynced} onToggleVaultSync={handleVaultToggle} personaMode={personaMode} isVaultEnabled={isVaultConfigEnabled} onTogglePersona={changePersona} variant="standard" onPollinations={generateWithPollinations} disableVisuals={isStoic} />
                     </div>
                 </div>
             )}

@@ -136,7 +136,7 @@ export const IStokWalkieTalkie: React.FC<IStokWalkieTalkieProps> = ({ onClose, o
                 const bytes = new Uint8Array(len);
                 for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
 
-                const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+                const audioBuffer = await ctx.decodeAudioData(bytes.buffer as ArrayBuffer);
                 const source = ctx.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(ctx.destination);
