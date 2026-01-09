@@ -5,7 +5,7 @@ import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { 
     Flame, Brain, ExternalLink, ArrowRight, Copy, Check, ChevronDown,
     Image as ImageIcon, RefreshCw, Search,
-    Network, BrainCircuit, Infinity, AlertTriangle
+    Network, BrainCircuit, Infinity, AlertTriangle, CheckCheck, Clock
 } from 'lucide-react';
 import type { ChatMessage } from '../../../types';
 import { generateImage } from '../../../services/geminiService';
@@ -20,7 +20,10 @@ interface ChatWindowProps {
   onUpdateMessage?: (messageId: string, newText: string) => void;
 }
 
-// --- SUB-COMPONENTS ---
+// ... (Sub-components: SystemStatusBubble, ThinkingAccordion, GroundingSources, ImageGenerationCard, MarkdownImage, CodeBlock, TypingIndicator, MessageBubble - KEPT AS IS, but removed here for brevity to focus on the main Virtuoso structure. In real implementation, these must be included.)
+
+// --- RE-INSERT SUB-COMPONENTS TO ENSURE FULL FILE IS VALID ---
+// (Copying existing sub-components to ensure no code loss, as the user wants full file content)
 
 const SystemStatusBubble = ({ status }: { status: string }) => (
     <div className="flex items-center gap-2.5 my-2 px-4 py-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-amber-500 w-fit animate-slide-up">
@@ -151,20 +154,34 @@ const CodeBlock = ({ language, children }: { language: string, children: React.R
     );
 };
 
-// --- MESSAGE BUBBLE ---
+const TypingIndicator = ({ personaMode }: { personaMode: 'hanisah' | 'stoic' }) => {
+    return (
+        <div className="flex justify-start mb-6 px-1 animate-fade-in w-full">
+            <div className="flex flex-col gap-2 mr-3 shrink-0 mt-1">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-lg border border-white/10 bg-white dark:bg-[#121214] ${personaMode === 'hanisah' ? 'text-orange-500' : 'text-cyan-500'}`}>
+                    {personaMode === 'hanisah' ? <Flame size={16} fill="currentColor"/> : <Brain size={16} fill="currentColor"/>}
+                </div>
+            </div>
+            <div className="bg-white dark:bg-[#0a0a0b] border border-black/5 dark:border-white/10 rounded-[24px] rounded-tl-sm px-5 py-4 flex items-center gap-1.5 shadow-sm h-[52px]">
+                <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce"></div>
+            </div>
+        </div>
+    );
+};
 
 const MessageBubble = memo(({ msg, personaMode, isLoading, onUpdateMessage }: { msg: ChatMessage, personaMode: 'hanisah' | 'stoic', isLoading: boolean, onUpdateMessage?: (id: string, text: string) => void }) => {
     
     const isModel = msg.role === 'model' || (msg.role as string) === 'assistant'; 
+    const isUser = !isModel;
     const isError = msg.metadata?.status === 'error';
     const isRerouting = msg.metadata?.isRerouting;
     
     const textContent: string = useMemo(() => {
         const rawText = msg.text;
         if (typeof rawText === 'string' && rawText) return rawText;
-        // Blob cannot be rendered directly as text, return empty or fallback
         if (rawText instanceof Blob) return ''; 
-        
         const anyMsg = msg as any;
         if (typeof anyMsg.content === 'string') return anyMsg.content;
         if (anyMsg.parts && anyMsg.parts[0]?.text) return anyMsg.parts[0].text; 
@@ -197,6 +214,13 @@ const MessageBubble = memo(({ msg, personaMode, isLoading, onUpdateMessage }: { 
         return { thought: thoughtContent, content: text, imgPrompt: imagePrompt };
     }, [textContent]);
 
+    const timestamp = useMemo(() => {
+        if (msg.metadata?.createdAt) {
+            return new Date(msg.metadata.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        return '';
+    }, [msg.metadata?.createdAt]);
+
     if (isModel && !content && !isLoading && !thought && !isError && !isRerouting && !imgPrompt) {
         return null;
     }
@@ -215,7 +239,6 @@ const MessageBubble = memo(({ msg, personaMode, isLoading, onUpdateMessage }: { 
 
             <div className={`relative max-w-[88%] sm:max-w-[80%] lg:max-w-[75%] flex flex-col ${isModel ? 'items-start' : 'items-end'}`}>
                 
-                {/* Bubble Container */}
                 <div className={`relative px-5 py-4 overflow-hidden text-sm md:text-[15px] leading-7 font-sans tracking-wide shadow-sm 
                     ${isModel 
                         ? 'bg-white dark:bg-[#0a0a0b] text-black dark:text-neutral-200 rounded-[24px] rounded-tl-sm border border-black/5 dark:border-white/10' 
@@ -225,7 +248,6 @@ const MessageBubble = memo(({ msg, personaMode, isLoading, onUpdateMessage }: { 
                     {isRerouting && msg.metadata?.systemStatus && !content && <SystemStatusBubble status={msg.metadata.systemStatus} />}
                     {thought && <ThinkingAccordion content={thought} isActive={isLoading && !content} />}
                     
-                    {/* Main Content */}
                     {content && (
                         <div className={`prose dark:prose-invert prose-sm max-w-none break-words min-w-0 ${isModel ? 'prose-p:text-neutral-800 dark:prose-p:text-neutral-300' : ''}`}>
                             <Markdown 
@@ -263,13 +285,28 @@ const MessageBubble = memo(({ msg, personaMode, isLoading, onUpdateMessage }: { 
                         </div>
                     )}
 
-                    {/* Metadata Footer: Provider Info */}
-                    {isModel && (
-                        <AIProviderInfo 
-                            metadata={msg.metadata} 
-                            isHydra={msg.metadata?.model === 'auto-best' || msg.metadata?.model?.includes('HYDRA')} 
-                        />
-                    )}
+                    <div className="flex items-center justify-between mt-2 pt-1 gap-4">
+                        <div className="flex-1">
+                             {isModel && (
+                                <AIProviderInfo 
+                                    metadata={msg.metadata} 
+                                    isHydra={msg.metadata?.model === 'auto-best' || msg.metadata?.model?.includes('HYDRA')} 
+                                    className="mt-0"
+                                />
+                            )}
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5 shrink-0 opacity-40 select-none">
+                            <span className="text-[9px] font-mono">{timestamp}</span>
+                            {isUser && (
+                                <>
+                                    {(msg.metadata?.status === 'success' || !msg.metadata?.status) && <CheckCheck size={12} />}
+                                    {msg.metadata?.status === 'loading' && <Clock size={12} className="animate-pulse" />}
+                                    {msg.metadata?.status === 'error' && <AlertTriangle size={12} className="text-red-500" />}
+                                </>
+                            )}
+                        </div>
+                    </div>
 
                     {isModel && msg.metadata?.groundingChunks && <GroundingSources chunks={msg.metadata.groundingChunks} />}
                 </div>
@@ -281,7 +318,6 @@ const MessageBubble = memo(({ msg, personaMode, isLoading, onUpdateMessage }: { 
     const prevText = typeof prev.msg.text === 'string' ? prev.msg.text : ((prev.msg as any).content || '');
     const nextText = typeof next.msg.text === 'string' ? next.msg.text : ((next.msg as any).content || '');
     
-    // DEEP CHECK: Metadata
     const prevMeta = JSON.stringify(prev.msg.metadata);
     const nextMeta = JSON.stringify(next.msg.metadata);
 
@@ -292,13 +328,21 @@ const MessageBubble = memo(({ msg, personaMode, isLoading, onUpdateMessage }: { 
 
 // --- MAIN WINDOW ---
 
+const itemKey = (index: number, item: any) => {
+    return item.id || index;
+};
+
 export const ChatWindow: React.FC<ChatWindowProps> = memo(({ messages, personaMode, isLoading, messagesEndRef, onUpdateMessage }) => {
     const virtuosoRef = useRef<VirtuosoHandle>(null);
 
     const allItems = useMemo(() => {
-        return isLoading 
-            ? [...messages, { id: 'loading-indicator', role: 'model', text: '', isLoader: true } as any] 
-            : messages;
+        if (isLoading) {
+             const lastMsg = messages[messages.length - 1];
+             if (lastMsg && lastMsg.role === 'user') {
+                 return [...messages, { id: 'loading-indicator', role: 'model', text: '', isLoader: true } as any];
+             }
+        }
+        return messages;
     }, [messages, isLoading]);
 
     return (
@@ -310,35 +354,24 @@ export const ChatWindow: React.FC<ChatWindowProps> = memo(({ messages, personaMo
                 initialTopMostItemIndex={Math.max(0, allItems.length - 1)}
                 followOutput="auto"
                 alignToBottom
-                // Crucial: Add padding to bottom so last message isn't hidden by the input bar
                 components={{ 
                     Footer: () => <div className="h-4" /> 
                 }}
                 atBottomThreshold={60}
-                overscan={200}
+                overscan={1000} 
+                computeItemKey={itemKey} 
                 itemContent={(index, msg) => {
                     if ((msg as any).isLoader) {
-                         if (messages.length > 0 && messages[messages.length-1].role === 'user') {
-                            return (
-                                <div className="flex justify-start mb-10 pl-14 animate-fade-in py-4">
-                                    <div className="flex items-center gap-4 px-6 py-4 rounded-2xl border border-dashed border-black/10 dark:border-white/10 bg-white/40 dark:bg-white/5 backdrop-blur-sm">
-                                        <div className="relative flex h-3 w-3">
-                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-accent shadow-[0_0_15px_var(--accent-glow)]"></span>
-                                        </div>
-                                        <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-500 flex items-center gap-2">
-                                            {personaMode === 'hanisah' ? 'HANISAH_SYNTHESIZING' : 'QUANTUM_ANALYSIS_ACTIVE'}
-                                        </span>
-                                    </div>
-                                </div>
-                            );
-                         }
-                         return <div className="h-4"></div>;
+                         return (
+                            <div style={{ willChange: 'transform' }}>
+                                <TypingIndicator personaMode={personaMode} />
+                            </div>
+                         );
                     }
                     const isLast = index === messages.length - 1;
                     const loadingState = isLoading && isLast && (msg.role === 'model' || (msg.role as string) === 'assistant');
                     return (
-                        <div className="py-2 px-2 md:px-4">
+                        <div className="py-2 px-2 md:px-4" style={{ willChange: 'transform' }}>
                              <MessageBubble key={msg.id || index} msg={msg} personaMode={personaMode} isLoading={loadingState} onUpdateMessage={onUpdateMessage}/>
                         </div>
                     );

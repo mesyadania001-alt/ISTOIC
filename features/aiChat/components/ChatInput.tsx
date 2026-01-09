@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect, useState, memo } from 'react';
+import React, { useRef, useEffect, useState, memo, useCallback } from 'react';
 import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, Paperclip, X, Image as ImageIcon, Flame, Brain, CornerDownLeft, Clipboard, ShieldCheck, FileText, Square, Globe, Palette } from 'lucide-react';
 import { TRANSLATIONS, getLang } from '../../../services/i18n';
 import { debugService } from '../../../services/debugService';
@@ -56,12 +56,15 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   const currentLang = getLang();
   const t = TRANSLATIONS[currentLang].chat;
 
-  // Auto-resize textarea
+  // Optimized: Resize using requestAnimationFrame to avoid layout thrashing during typing
   useEffect(() => {
     if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-      const newHeight = Math.min(inputRef.current.scrollHeight, 150);
-      inputRef.current.style.height = `${Math.max(24, newHeight)}px`;
+      const textarea = inputRef.current;
+      requestAnimationFrame(() => {
+          textarea.style.height = 'auto';
+          const newHeight = Math.min(textarea.scrollHeight, 150);
+          textarea.style.height = `${Math.max(24, newHeight)}px`;
+      });
     }
   }, [input, attachment]);
 
@@ -75,13 +78,25 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   const handlePaste = (e: React.ClipboardEvent) => {
       e.preventDefault();
       const text = e.clipboardData.getData('text/plain');
-      document.execCommand('insertText', false, text);
+      // Safer replacement than execCommand
+      if (inputRef.current) {
+          const start = inputRef.current.selectionStart;
+          const end = inputRef.current.selectionEnd;
+          const newValue = input.substring(0, start) + text + input.substring(end);
+          setInput(newValue);
+          // Move cursor
+          setTimeout(() => {
+              if (inputRef.current) {
+                  inputRef.current.selectionStart = inputRef.current.selectionEnd = start + text.length;
+              }
+          }, 0);
+      }
       
       setPasteFlash(true);
       setTimeout(() => setPasteFlash(false), 500);
   };
 
-  const toggleDictation = (e: React.MouseEvent) => {
+  const toggleDictation = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     debugService.logAction(UI_REGISTRY.CHAT_INPUT_MIC, FN_REGISTRY.CHAT_SEND_MESSAGE, isDictating ? 'STOP' : 'START');
     
@@ -91,7 +106,6 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
       return;
     }
 
-    // BROWSER COMPATIBILITY CHECK
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("Fitur ini membutuhkan Google Chrome, Edge, atau Safari terbaru. Browser Anda tidak mendukung Web Speech API.");
@@ -114,17 +128,12 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
         };
         
         recognition.onresult = (event: any) => {
-          let interimTranscript = '';
           let finalTranscript = '';
-
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i].isFinal) {
               finalTranscript += event.results[i][0].transcript;
-            } else {
-              interimTranscript += event.results[i][0].transcript;
             }
           }
-
           if (finalTranscript) {
               setInput((prev) => {
                   const needsSpace = prev.length > 0 && !prev.endsWith(' ');
@@ -144,7 +153,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
         console.error("Mic initialization failed", err);
         alert("Gagal memulai mikrofon. Pastikan izin telah diberikan.");
     }
-  };
+  }, [currentLang, isDictating, setInput]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -220,7 +229,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   const ringColor = personaMode === 'hanisah' ? 'ring-orange-500/20' : 'ring-cyan-500/20';
 
   return (
-    <div className="w-full relative group">
+    <div className="w-full relative group" style={{ willChange: 'transform' }}>
       
       {/* Dictation Overlay Indicator */}
       {isDictating && (
@@ -246,7 +255,7 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
       {/* MAIN CAPSULE - GLASS HUD STYLE */}
       <div 
         className={`
-            w-full transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]
+            w-full transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]
             bg-white/80 dark:bg-[#0f0f11]/80 backdrop-blur-xl
             border 
             rounded-[36px] p-2 flex flex-col

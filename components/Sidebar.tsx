@@ -2,7 +2,7 @@
 import React, { useState, useEffect, memo } from 'react';
 import { type FeatureID, FEATURES } from '../constants';
 import useLocalStorage from '../hooks/useLocalStorage';
-import { Settings, Flame, Cpu, Activity, AlertTriangle, PanelLeft, PanelLeftClose, ChevronRight, Phone } from 'lucide-react';
+import { Settings, Flame, Cpu, Activity, AlertTriangle, PanelLeft, PanelLeftClose, ChevronRight } from 'lucide-react';
 import { useNavigationIntelligence } from '../hooks/useNavigationIntelligence';
 import { getText, getLang } from '../services/i18n';
 import { debugService } from '../services/debugService';
@@ -13,10 +13,9 @@ interface SidebarProps {
   activeFeature: FeatureID;
   setActiveFeature: (feature: FeatureID) => void;
   chatLogic: any;
-  onOpenTeleponan?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveFeature, onOpenTeleponan }) => {
+export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveFeature }) => {
   const [personaMode] = useLocalStorage<'hanisah' | 'stoic'>('ai_persona_mode', 'hanisah');
   
   // Persistent Expansion State
@@ -59,7 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
       // Run once immediately
       checkHealth();
 
-      const interval = setInterval(checkHealth, 2000);
+      const interval = setInterval(checkHealth, 3000); // Optimized to 3s for battery saving
       const unsubscribe = debugService.subscribeUI((state) => setUiMatrix(state)); // Listen to matrix updates
       
       return () => { 
@@ -120,7 +119,7 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
           hidden md:flex flex-col fixed top-0 left-0 bottom-0 
           z-[1200] 
           /* UPDATED: Semantic Token Usage */
-          bg-skin-card/80 backdrop-blur-2xl 
+          bg-skin-card/80 backdrop-blur-3xl 
           border-r border-skin-border
           transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]
           ${isExpanded ? 'w-[280px] shadow-[20px_0_40px_-10px_rgba(0,0,0,0.3)]' : 'w-[88px]'}
@@ -245,28 +244,6 @@ export const Sidebar: React.FC<SidebarProps> = memo(({ activeFeature, setActiveF
                 </button>
               );
             })}
-
-            {/* SECURE CALL BUTTON */}
-            {onOpenTeleponan && (
-                <button
-                  id="nav-teleponan"
-                  onClick={onOpenTeleponan}
-                  className={`
-                    relative flex items-center rounded-[16px] transition-all duration-300 group overflow-hidden border border-green-500/10 bg-green-500/5 hover:bg-green-500/10 hover:border-green-500/30 mt-2
-                    ${isExpanded ? 'w-full px-4 py-3 gap-4' : 'w-12 h-12 justify-center mx-auto'}
-                  `}
-                  title={!isExpanded ? "SECURE CALL" : undefined}
-                >
-                  <div className={`transition-transform duration-300 relative z-10 group-hover:scale-110`}>
-                    <Phone size={20} className="text-green-500" strokeWidth={2} />
-                  </div>
-                  <div className={`overflow-hidden whitespace-nowrap transition-all duration-300 flex-1 flex justify-between items-center ${isExpanded ? 'opacity-100 max-w-full pl-2' : 'opacity-0 max-w-0'}`}>
-                    <span className={`text-[10px] font-bold tracking-[0.15em] uppercase text-green-500`}>
-                        TELEPONAN
-                    </span>
-                  </div>
-                </button>
-            )}
           </nav>
 
           {/* SYSTEM FOOTER */}

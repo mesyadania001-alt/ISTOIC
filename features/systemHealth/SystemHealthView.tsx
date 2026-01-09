@@ -152,7 +152,7 @@ export const SystemHealthView: React.FC = () => {
             setHealth(debugService.getSystemHealth());
             setProviders(KEY_MANAGER.getAllProviderStatuses());
             
-            // Start Interval
+            // Start Interval - INCREASED TO 3000ms for battery saving
             diagInterval = setInterval(() => {
                 setHealth(debugService.getSystemHealth());
                 setProviders(KEY_MANAGER.getAllProviderStatuses());

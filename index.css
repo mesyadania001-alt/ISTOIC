@@ -1,7 +1,7 @@
 
 /* 
-  IStoicAI Base Styles v0.30
-  iOS PWA Optimized
+  IStoicAI Base Styles v0.31
+  iOS PWA Optimized & Smooth Performance Tweaks
 */
 
 @tailwind base;
@@ -48,9 +48,11 @@
 
 html {
     height: 100%;
-    /* Prevent elastic scrolling on iOS */
+    /* Prevent elastic scrolling on iOS globally */
     overflow: hidden; 
     background-color: var(--bg-main);
+    /* Improve tap responsiveness */
+    touch-action: manipulation;
 }
 
 body {
@@ -64,7 +66,6 @@ body {
   -webkit-tap-highlight-color: transparent;
   /* Prevent pull-to-refresh on mobile PWA */
   overscroll-behavior-y: none; 
-  touch-action: manipulation;
   
   background-color: var(--bg-main);
   color: var(--text-main);
@@ -132,7 +133,7 @@ body {
   }
 }
 
-/* ANIMATIONS */
+/* ANIMATIONS - GPU ACCELERATED */
 @keyframes aurora {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -141,6 +142,7 @@ body {
 .animate-aurora {
   background-size: 200% 200%;
   animation: aurora 20s ease infinite;
+  will-change: background-position;
 }
 
 @keyframes gradient-x {
@@ -151,6 +153,7 @@ body {
 .animate-gradient-text {
   background-size: 200% 200%;
   animation: gradient-x 4s ease infinite;
+  will-change: background-position;
 }
 
 /* GLITCH EFFECT */
@@ -178,6 +181,15 @@ body {
   left: -2px; text-shadow: -1px 0 blue;
   clip: rect(85px, 550px, 140px, 0);
   animation: glitch-anim-1 2s infinite linear alternate-reverse;
+}
+
+/* SLIDE ANIMATIONS */
+@keyframes slideUp {
+  0% { opacity: 0; transform: translate3d(0, 20px, 0); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.animate-slide-up {
+    will-change: transform, opacity;
 }
 
 /* UTILITIES */

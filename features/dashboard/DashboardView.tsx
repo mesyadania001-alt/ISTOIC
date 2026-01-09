@@ -12,18 +12,15 @@ import { DailyStoicWidget } from './components/DailyStoicWidget';
 
 interface DashboardProps {
     onNavigate: (feature: FeatureID) => void;
-    notes: Note[]; // Receive notes from App state
+    notes: Note[]; 
 }
 
-// Strictly Typed StatBox - Modern Glass
 const StatBox: React.FC<{ label: string; value: string; isPulse?: boolean; color?: string; icon?: React.ReactNode; onClick?: () => void }> = ({ label, value, isPulse, color, icon, onClick }) => (
     <button 
         onClick={onClick}
         aria-label={`${label}: ${value}`}
-        /* UPDATED: Semantic Backgrounds */
         className={`relative overflow-hidden bg-skin-card/60 backdrop-blur-xl p-6 md:p-7 flex flex-col justify-between rounded-[32px] border border-skin-border hover:border-accent/30 shadow-sm hover:shadow-[0_20px_40px_-10px_var(--accent-glow)] transition-all duration-500 group h-full w-full text-left ring-1 ring-skin-border ${onClick ? 'cursor-pointer active:scale-[0.98]' : 'cursor-default'}`}
     >
-        {/* Ambient Gradient Hover */}
         <div className="absolute inset-0 bg-gradient-to-br from-transparent to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
         <div className="absolute top-0 right-0 w-32 h-32 bg-skin-surface rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-accent/10 transition-colors"></div>
 
@@ -69,7 +66,6 @@ const BentoCard: React.FC<{
                 ${className}
             `}
         >
-            {/* Background Texture */}
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay"></div>
             <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-skin-surface opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
             
@@ -124,7 +120,6 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
         };
     }, [isVaultUnlocked, isOnline]);
 
-    // Explicit Handlers
     const handleNavSystem = () => {
         debugService.logAction(UI_REGISTRY.DASHBOARD_BTN_SYSTEM_STATUS, FN_REGISTRY.OPEN_SYSTEM_MECHANIC, 'NAV_SYSTEM');
         onNavigate('system');
@@ -165,7 +160,6 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
         onNavigate('notes');
     };
 
-    // Translations handled in i18n.ts now
     const t = {
         uptime: language === 'en' ? "SYSTEM ONLINE" : "SISTEM ONLINE",
         nodes: language === 'en' ? "TOTAL NOTES" : "TOTAL CATATAN",
@@ -181,7 +175,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
     };
 
     return (
-        <div className="min-h-full flex flex-col px-4 pb-32 pt-[calc(env(safe-area-inset-top)+1.5rem)] md:px-8 md:pt-12 md:pb-40 lg:px-12 animate-fade-in bg-noise relative z-10">
+        <div className="h-full w-full overflow-y-auto custom-scroll flex flex-col px-4 pb-32 pt-[calc(env(safe-area-inset-top)+1.5rem)] md:px-8 md:pt-12 md:pb-40 lg:px-12 animate-fade-in bg-noise relative z-10">
             <VaultPinModal 
                 isOpen={showPinModal} 
                 onClose={() => setShowPinModal(false)} 
@@ -232,12 +226,10 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
 
                 <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-6 md:gap-8">
                     
-                    {/* DAILY STOIC WIDGET */}
                     <div className="md:col-span-6 lg:col-span-8">
                         <DailyStoicWidget />
                     </div>
 
-                    {/* Chat Bento */}
                     <BentoCard 
                         title={t.chatTitle} 
                         desc={t.chatDesc} 
@@ -248,7 +240,6 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
                         accentColor={personaMode === 'hanisah' ? "group-hover:text-orange-500" : "group-hover:text-cyan-500"}
                     />
                     
-                    {/* Archive Bento */}
                     <BentoCard 
                         title={t.archiveTitle} 
                         desc={t.archiveDesc} 
@@ -258,7 +249,6 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
                         delay={200}
                     />
                     
-                    {/* Tools Bento */}
                     <BentoCard 
                         title={t.toolsTitle} 
                         desc={t.toolsDesc} 
@@ -268,7 +258,6 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
                         delay={300}
                     />
 
-                    {/* Recent Logs & Security */}
                     <div className="md:col-span-6 lg:col-span-8 bg-skin-card rounded-[40px] border border-skin-border p-8 md:p-10 flex flex-col justify-between animate-slide-up shadow-sm ring-1 ring-skin-border" style={{ animationDelay: '400ms' }}>
                         <div className="flex items-center justify-between mb-8 border-b border-skin-border pb-6">
                             <h3 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-skin-text flex items-center gap-4">

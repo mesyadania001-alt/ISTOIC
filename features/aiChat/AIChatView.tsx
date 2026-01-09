@@ -77,16 +77,11 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
 
     const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
         if (messagesEndRef.current) {
-            // Tiny delay to allow DOM update
             setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' }); }, 50);
             isAutoScrolling.current = true;
             setShowScrollBtn(false);
         }
     }, []);
-
-    // Manual scroll listener is handled within ChatWindow (Virtuoso) typically, 
-    // but if we want a global "New Message" button we'd need to hook into Virtuoso's state.
-    // For now, we rely on Virtuoso's followOutput prop in ChatWindow.
 
     if (!isThreadsLoaded) return <div className="h-full w-full flex flex-col items-center justify-center gap-4 bg-white dark:bg-[#0a0a0b] animate-fade-in"><Loader2 size={32} className="animate-spin text-[var(--accent-color)]" /><span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-500 animate-pulse">RESTORING_MEMORY_BANKS...</span></div>;
 
@@ -115,7 +110,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const isHydraActive = activeModel?.id === 'auto-best';
 
     return (
-        <div className={`h-[100dvh] w-full relative bg-noise overflow-hidden flex flex-col ${bgGradient}`} style={{ overscrollBehavior: 'contain' }}>
+        <div className={`h-full w-full relative bg-noise flex flex-col ${bgGradient} overflow-hidden`} style={{ overscrollBehavior: 'contain' }}>
             <VaultPinModal isOpen={showPinModal} onClose={() => setShowPinModal(false)} onSuccess={() => setIsVaultSynced(true)} />
             
             {/* --- 1. HEADER (FIXED TOP) --- */}
@@ -145,7 +140,8 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
             </header>
 
             {/* --- 2. CHAT CONTENT (FLEXIBLE) --- */}
-            <div className="flex-1 min-h-0 relative w-full max-w-[900px] mx-auto pt-2" id="main-scroll-container">
+            {/* Main content expands to fill available space, Virtuoso handles internal scroll */}
+            <div className="flex-1 min-h-0 relative w-full max-w-[900px] mx-auto pt-2">
                 {showEmptyState ? (
                     <div className="flex flex-col h-full justify-center items-center w-full pb-20 animate-fade-in overflow-y-auto custom-scroll px-4">
                         <div className="text-center mb-10 space-y-4">

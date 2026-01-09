@@ -1,16 +1,15 @@
 
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useTransition } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { MobileNav } from './components/MobileNav';
 import { type FeatureID } from './constants';
-// Eager load Dashboard for instant perceived performance
 import DashboardView from './features/dashboard/DashboardView'; 
 import { TutorialOverlay } from './components/TutorialOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import useLocalStorage from './hooks/useLocalStorage';
 import { useIDB } from './hooks/useIDB'; 
 import { useChatLogic } from './features/aiChat/hooks/useChatLogic';
-import { type Note, type IncomingConnection, type GlobalPeerState } from './types';
+import { type Note, type IncomingConnection } from './types';
 import { DebugConsole } from './components/DebugConsole';
 import { debugService } from './services/debugService';
 import { KEY_MANAGER } from './services/geminiService';
@@ -25,10 +24,9 @@ import { GenerativeSessionProvider } from './contexts/GenerativeSessionContext';
 import { activatePrivacyShield } from './utils/privacyShield';
 import { useGlobalPeer } from './hooks/useGlobalPeer';
 import { ConnectionNotification } from './features/istok/components/ConnectionNotification';
-import { decryptData, encryptData } from './utils/crypto';
+import { decryptData } from './utils/crypto';
 import { IStokUserIdentity } from './features/istok/services/istokIdentity';
 
-// --- LAZY LOAD HEAVY MODULES ---
 const SmartNotesView = lazy(() => import('./features/smartNotes/SmartNotesView').then(module => ({ default: module.SmartNotesView })));
 const AIChatView = lazy(() => import('./features/aiChat/AIChatView'));
 const AIToolsView = lazy(() => import('./features/aiTools/AIToolsView'));
@@ -50,7 +48,6 @@ export const THEME_COLORS: Record<string, string> = {
   gold: '#FFD700'
 };
 
-// Loading Fallback Component
 const ViewLoader = () => (
     <div className="h-full w-full flex flex-col items-center justify-center text-neutral-500 gap-4 animate-pulse">
         <Loader2 size={32} className="animate-spin text-accent" />
@@ -61,25 +58,19 @@ const ViewLoader = () => (
 interface AppContentProps {
     notes: Note[];
     setNotes: (notes: Note[]) => void;
-    onOpenTeleponan: () => void;
-    // Removed incomingRequest props as they are handled in App root now
 }
 
-const AppContent: React.FC<AppContentProps> = ({ 
-    notes, setNotes, onOpenTeleponan
-}) => {
+const AppContent: React.FC<AppContentProps> = ({ notes, setNotes }) => {
   const [activeFeature, setActiveFeature] = useState<FeatureID>('dashboard');
+  const [isPending, startTransition] = useTransition(); // Concurrent Mode for Smooth Nav
+
   const [isTutorialComplete, setIsTutorialComplete] = useLocalStorage<boolean>('app_tutorial_complete_v101', false);
-  
-  // REACTIVE SETTINGS
   const [theme] = useLocalStorage<string>('app_theme', 'cyan');
   const [colorScheme] = useLocalStorage<'system' | 'light' | 'dark'>('app_color_scheme', 'system');
   const [language] = useLocalStorage<string>('app_language', 'id');
-  
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [registryValid, setRegistryValid] = useState<boolean>(false);
 
-  // Neural Chat Global State
   const chatLogic = useChatLogic(notes, setNotes);
   
   const hexToRgb = (hex: string) => {
@@ -155,92 +146,94 @@ const AppContent: React.FC<AppContentProps> = ({
     };
     
     const handleDebugToggle = () => setIsDebugOpen(prev => !prev);
-    
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('istoic-toggle-debug', handleDebugToggle);
-    
     return () => {
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('istoic-toggle-debug', handleDebugToggle);
     };
   }, []);
 
-  if (!registryValid) {
-      return (
-          <div className="h-screen w-screen bg-black flex items-center justify-center text-red-600 flex-col gap-4">
-              <ShieldAlert size={64} />
-              <h1 className="text-4xl font-black uppercase tracking-widest">SYSTEM HALT</h1>
-              <p className="text-sm font-mono text-red-400">REGISTRY INTEGRITY CHECK FAILED.</p>
-          </div>
-      );
-  }
+  // SMOOTH NAVIGATION HANDLER
+  const handleNavigate = (feature: FeatureID) => {
+    startTransition(() => {
+        setActiveFeature(feature);
+    });
+  };
+
+  if (!registryValid) return <div className="h-screen w-screen bg-black flex items-center justify-center text-red-600 flex-col gap-4"><ShieldAlert size={64} /><h1 className="text-4xl font-black uppercase tracking-widest">SYSTEM HALT</h1></div>;
 
   const renderContent = () => {
     return (
         <Suspense fallback={<ViewLoader />}>
-            {(() => {
-                switch (activeFeature) {
-                    case 'dashboard': return <ErrorBoundary viewName="DASHBOARD"><DashboardView key={language} onNavigate={setActiveFeature} notes={notes} /></ErrorBoundary>;
-                    case 'notes': return <ErrorBoundary viewName="ARCHIVE_VAULT"><SmartNotesView key={language} notes={notes} setNotes={setNotes} /></ErrorBoundary>;
-                    case 'chat': return <ErrorBoundary viewName="NEURAL_LINK"><AIChatView key={language} chatLogic={chatLogic} /></ErrorBoundary>;
-                    case 'tools': return <ErrorBoundary viewName="NEURAL_ARSENAL"><AIToolsView key={language} /></ErrorBoundary>;
-                    case 'system': return <ErrorBoundary viewName="SYSTEM_HEALTH"><SystemHealthView key={language} /></ErrorBoundary>;
-                    case 'settings': return <ErrorBoundary viewName="CORE_CONFIG"><SettingsView key={language} onNavigate={setActiveFeature} /></ErrorBoundary>;
-                    default: return <ErrorBoundary viewName="UNKNOWN_MODULE"><DashboardView key={language} onNavigate={setActiveFeature} notes={notes} /></ErrorBoundary>;
-                }
-            })()}
+            <div className={`h-full w-full transition-opacity duration-300 ${isPending ? 'opacity-70 scale-[0.99] origin-center' : 'opacity-100 scale-100'}`}>
+                {(() => {
+                    switch (activeFeature) {
+                        case 'dashboard': return <ErrorBoundary viewName="DASHBOARD"><DashboardView key={language} onNavigate={handleNavigate} notes={notes} /></ErrorBoundary>;
+                        case 'notes': return <ErrorBoundary viewName="ARCHIVE_VAULT"><SmartNotesView key={language} notes={notes} setNotes={setNotes} /></ErrorBoundary>;
+                        case 'chat': return <ErrorBoundary viewName="NEURAL_LINK"><AIChatView key={language} chatLogic={chatLogic} /></ErrorBoundary>;
+                        case 'tools': return <ErrorBoundary viewName="NEURAL_ARSENAL"><AIToolsView key={language} /></ErrorBoundary>;
+                        case 'system': return <ErrorBoundary viewName="SYSTEM_HEALTH"><SystemHealthView key={language} /></ErrorBoundary>;
+                        case 'settings': return <ErrorBoundary viewName="CORE_CONFIG"><SettingsView key={language} onNavigate={handleNavigate} /></ErrorBoundary>;
+                        default: return <ErrorBoundary viewName="UNKNOWN_MODULE"><DashboardView key={language} onNavigate={handleNavigate} notes={notes} /></ErrorBoundary>;
+                    }
+                })()}
+            </div>
         </Suspense>
     );
   };
 
   return (
-    <div className="flex h-[100dvh] w-full text-skin-text font-sans bg-skin-main theme-transition overflow-hidden selection:bg-accent/30 selection:text-accent relative pl-safe pr-safe">
+    <div className="flex h-[100dvh] w-full text-skin-text font-sans bg-skin-main theme-transition overflow-hidden selection:bg-accent/30 selection:text-accent relative">
       
       {/* 1. Global Ambient Background Layer */}
-      <div className="absolute inset-0 pointer-events-none z-0">
+      <div className="absolute inset-0 pointer-events-none z-0 transform-gpu">
           <div className="absolute inset-0 bg-gradient-to-br from-skin-main via-skin-main to-skin-main opacity-100"></div>
-          <div className="absolute inset-0 opacity-20 dark:opacity-30 mix-blend-screen bg-gradient-to-tr from-[var(--accent-color)]/20 via-purple-500/10 to-blue-500/10 filter blur-[100px] animate-aurora"></div>
+          <div className="absolute inset-0 opacity-20 dark:opacity-30 mix-blend-screen bg-gradient-to-tr from-[var(--accent-color)]/20 via-purple-500/10 to-blue-500/10 filter blur-[100px] animate-aurora will-change-transform"></div>
           <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.02] mix-blend-overlay"></div>
       </div>
 
-      {/* 2. Main Content */}
-      <div className="flex w-full h-full relative z-10">
+      {/* 2. Main Content Layout */}
+      <div className="flex w-full h-full relative z-10 overflow-hidden">
           <Sidebar 
             key={`sidebar-${language}`}
             activeFeature={activeFeature} 
-            setActiveFeature={setActiveFeature} 
+            setActiveFeature={handleNavigate} 
             chatLogic={chatLogic}
-            onOpenTeleponan={onOpenTeleponan}
           />
           
-          <main className="flex-1 relative h-full overflow-hidden bg-transparent min-w-0">
-            <div id="main-scroll-container" className="h-full w-full overflow-y-auto custom-scroll pb-safe scroll-smooth">
-              <div className="min-h-full pb-32 md:pb-40">
+          <main className="flex-1 relative h-full w-full bg-transparent min-w-0 flex flex-col">
+            {/* 
+                CRITICAL SCROLL FIX:
+                This container is FIXED height (h-full) and HIDDEN overflow.
+                Each View (Dashboard, Chat, etc) MUST manage its own scrolling.
+                This prevents double scrollbars and "ghost scrolling" during transitions.
+            */}
+            <div className="flex-1 w-full h-full overflow-hidden relative">
                 {renderContent()}
-              </div>
             </div>
           </main>
       </div>
 
       <MobileNav 
         activeFeature={activeFeature} 
-        setActiveFeature={setActiveFeature} 
+        setActiveFeature={handleNavigate} 
         chatLogic={chatLogic} 
       />
 
       <LiveMiniPlayer />
-
       <DebugConsole isOpen={isDebugOpen} onClose={() => setIsDebugOpen(false)} />
 
       {!isTutorialComplete && (
           <TutorialOverlay 
             onComplete={() => setIsTutorialComplete(true)} 
-            onNavigate={setActiveFeature} 
+            onNavigate={handleNavigate} 
           />
       )}
 
       <style>{`
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .pt-safe { padding-top: env(safe-area-inset-top); }
       `}</style>
     </div>
   );
@@ -255,29 +248,19 @@ const App: React.FC = () => {
     const [identity] = useLocalStorage<IStokUserIdentity | null>('istok_user_identity', null);
     
     useIndexedDBSync(notes);
-
-    // --- GLOBAL PEER ENGINE ---
     const { peer, incomingConnection, clearIncoming } = useGlobalPeer(identity);
-    
-    // --- GLOBAL CONNECTION HANDLER ---
     const [acceptedConnection, setAcceptedConnection] = useState<IncomingConnection | null>(null);
-
-    // --- INCOMING REQUEST DATA PARSING ---
     const [requestIdentity, setRequestIdentity] = useState<string>('');
 
     useEffect(() => {
         if (incomingConnection) {
-            // IMMEDIATE FEEDBACK: If no data yet, show loading
             if (!incomingConnection.firstData) {
                 setRequestIdentity('ESTABLISHING LINK...');
                 return;
             }
-  
             const process = async () => {
                 const { firstData } = incomingConnection;
-                // Try basic pins + default '000000'
                 const payload = await decryptData(firstData.payload, '000000') || await decryptData(firstData.payload, '123456');
-                
                 if (payload) {
                     try {
                       const json = JSON.parse(payload);
@@ -295,62 +278,40 @@ const App: React.FC = () => {
 
     const handleAcceptConnection = async (request: IncomingConnection) => {
         setAcceptedConnection(request);
-        setSessionMode('ISTOK'); // Switch to IStok View
-        clearIncoming(); // Clear notification
+        setSessionMode('ISTOK'); 
+        clearIncoming();
     };
 
-    // ACTIVATE PRIVACY SHIELD GLOBALLY
-    useEffect(() => {
-        activatePrivacyShield();
-    }, []);
+    useEffect(() => { activatePrivacyShield(); }, []);
 
-    // HYDRA DEEP LINK HANDLER (Hot-Swap)
     useEffect(() => {
         const handleDeepLink = () => {
             const hash = window.location.hash;
             const search = window.location.search;
             const params = new URLSearchParams(search);
-
-            // DETECT ISTOK LINK (Has #connect or ?connect)
-            // Priority: URL params first, then Hash params
             const connectId = params.get('connect') || new URLSearchParams(hash.replace('#', '?')).get('connect');
-
             if (connectId) {
                 console.log("[HYDRA-LINK] Incoming P2P Connection Detected. Switching Mode.");
                 setSessionMode('ISTOK');
             }
         };
-
-        // Check on mount
         handleDeepLink();
-
-        // Check on hash change (if app is already open)
         window.addEventListener('hashchange', handleDeepLink);
         window.addEventListener('popstate', handleDeepLink);
-
         return () => {
             window.removeEventListener('hashchange', handleDeepLink);
             window.removeEventListener('popstate', handleDeepLink);
         };
     }, []);
     
-    if (sessionMode === 'AUTH') {
-        return <AuthView onAuthSuccess={() => setSessionMode('SELECT')} />;
-    }
-
-    if (sessionMode === 'SELECT') {
-        return <AppSelector onSelect={(mode) => setSessionMode(mode)} />;
-    }
+    if (sessionMode === 'AUTH') return <AuthView onAuthSuccess={() => setSessionMode('SELECT')} />;
+    if (sessionMode === 'SELECT') return <AppSelector onSelect={(mode) => setSessionMode(mode)} />;
 
     if (sessionMode === 'ISTOK') {
         return (
             <Suspense fallback={<div className="h-screen w-screen bg-black flex items-center justify-center text-red-500 font-mono">INITIALIZING_SECURE_LAYER...</div>}>
                 <ErrorBoundary viewName="ISTOK_SECURE_CHANNEL">
-                    <IStokView 
-                        onLogout={() => setSessionMode('AUTH')} 
-                        globalPeer={peer} 
-                        initialAcceptedConnection={acceptedConnection}
-                    />
+                    <IStokView onLogout={() => setSessionMode('AUTH')} globalPeer={peer} initialAcceptedConnection={acceptedConnection} />
                 </ErrorBoundary>
             </Suspense>
         );
@@ -369,26 +330,16 @@ const App: React.FC = () => {
     return (
         <GenerativeSessionProvider>
             <LiveSessionProvider notes={notes} setNotes={setNotes}>
-                
-                {/* GLOBAL CONNECTION NOTIFICATION OVERLAY - ROOT LEVEL */}
                 {incomingConnection && (
                     <ConnectionNotification 
                         identity={requestIdentity}
                         peerId={incomingConnection.conn.peer}
                         onAccept={() => handleAcceptConnection(incomingConnection)}
-                        onDecline={() => { 
-                            incomingConnection.conn.close(); 
-                            clearIncoming(); 
-                        }}
+                        onDecline={() => { incomingConnection.conn.close(); clearIncoming(); }}
                         isProcessing={!incomingConnection.firstData} 
                     />
                 )}
-
-                <AppContent 
-                    notes={notes} 
-                    setNotes={setNotes} 
-                    onOpenTeleponan={() => setSessionMode('TELEPONAN')} 
-                />
+                <AppContent notes={notes} setNotes={setNotes} />
             </LiveSessionProvider>
         </GenerativeSessionProvider>
     );
