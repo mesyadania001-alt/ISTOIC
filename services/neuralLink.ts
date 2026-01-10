@@ -2,10 +2,13 @@
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { encodeAudio, decodeAudio, decodeAudioData, noteTools, visualTools, KEY_MANAGER } from "./geminiService";
 import { debugService } from "./debugService";
+import { browserSpeech } from "./browserSpeech";
+import { HANISAH_KERNEL } from "./melsaKernel";
 
-export type NeuralLinkStatus = 'IDLE' | 'CONNECTING' | 'ACTIVE' | 'ERROR' | 'RECONNECTING';
+export type NeuralLinkStatus = 'IDLE' | 'CONNECTING' | 'ACTIVE' | 'ERROR' | 'RECONNECTING' | 'THINKING' | 'SPEAKING';
 export type MicMode = 'STANDARD' | 'ISOLATION' | 'HIGH_FIDELITY';
 export type AmbientMode = 'OFF' | 'CYBER' | 'RAIN' | 'CAFE';
+export type EngineType = 'GEMINI_REALTIME' | 'HYDRA_HYBRID';
 
 export interface TranscriptionEvent {
     text: string;
@@ -18,6 +21,7 @@ export interface NeuralLinkConfig {
     persona: 'hanisah' | 'stoic';
     systemInstruction: string;
     voiceName: string;
+    engine: EngineType; // ADDED
     onStatusChange: (status: NeuralLinkStatus, error?: string) => void;
     onToolCall: (toolCall: any) => Promise<any>;
     onTranscription?: (event: TranscriptionEvent) => void;
@@ -52,85 +56,6 @@ class PCMWorklet extends AudioWorkletProcessor {
 registerProcessor('pcm-worklet', PCMWorklet);
 `;
 
-/**
- * PROCEDURAL AMBIENT ENGINE
- */
-class AmbientMixer {
-    private ctx: AudioContext;
-    private activeNodes: AudioNode[] = [];
-    private gainNode: GainNode;
-
-    constructor(ctx: AudioContext) {
-        this.ctx = ctx;
-        this.gainNode = ctx.createGain();
-        this.gainNode.gain.value = 0.15; // Default low volume
-        this.gainNode.connect(ctx.destination);
-    }
-
-    setMode(mode: AmbientMode) {
-        this.stop();
-        if (mode === 'OFF') return;
-
-        const t = this.ctx.currentTime;
-
-        if (mode === 'CYBER') {
-            const osc = this.ctx.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(50, t);
-            
-            const filter = this.ctx.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(200, t);
-            
-            const lfo = this.ctx.createOscillator();
-            lfo.type = 'sine';
-            lfo.frequency.value = 0.2; 
-            const lfoGain = this.ctx.createGain();
-            lfoGain.gain.value = 100;
-
-            lfo.connect(lfoGain);
-            lfoGain.connect(filter.frequency);
-            
-            osc.connect(filter);
-            filter.connect(this.gainNode);
-            
-            osc.start();
-            lfo.start();
-            this.activeNodes.push(osc, lfo, filter, lfoGain);
-        } 
-        else if (mode === 'RAIN') {
-            const bufferSize = 2 * this.ctx.sampleRate;
-            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-            const output = buffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) {
-                output[i] = Math.random() * 2 - 1;
-            }
-
-            const whiteNoise = this.ctx.createBufferSource();
-            whiteNoise.buffer = buffer;
-            whiteNoise.loop = true;
-
-            const filter = this.ctx.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.value = 800;
-
-            whiteNoise.connect(filter);
-            filter.connect(this.gainNode);
-            
-            whiteNoise.start();
-            this.activeNodes.push(whiteNoise, filter);
-        }
-    }
-
-    stop() {
-        this.activeNodes.forEach(node => {
-            try { (node as any).stop && (node as any).stop(); } catch(e){}
-            try { node.disconnect(); } catch(e){}
-        });
-        this.activeNodes = [];
-    }
-}
-
 export class NeuralLinkService {
     private session: any = null;
     private inputCtx: AudioContext | null = null;
@@ -149,7 +74,6 @@ export class NeuralLinkService {
     private isWorkletLoaded: boolean = false;
     
     // Modules
-    private ambientMixer: AmbientMixer | null = null;
     private currentMicMode: MicMode = 'STANDARD';
 
     constructor() {}
@@ -159,7 +83,8 @@ export class NeuralLinkService {
     }
 
     async connect(config: NeuralLinkConfig) {
-        if (this.isConnecting || this.isConnected) return;
+        // Prevent race condition
+        if (this.isConnecting) return;
         
         this.isConnecting = true;
         this.config = config;
@@ -168,178 +93,206 @@ export class NeuralLinkService {
         this.disconnect(true); 
         config.onStatusChange('CONNECTING');
 
-        await this.attemptConnection(config);
-    }
-
-    private async attemptConnection(config: NeuralLinkConfig) {
-        try {
-            await this.initializeSession(config);
-        } catch (e: any) {
-            console.error("Neural Link Setup Failed:", e);
-            
-            // Auto-Reconnect Logic for Socket Errors (1007, etc)
-            if (this.retryCount < this.maxRetries && !e.name.includes('NotAllowed')) {
-                this.retryCount++;
-                const delay = Math.pow(2, this.retryCount) * 1000;
-                config.onStatusChange('RECONNECTING');
-                debugService.log('WARN', 'NEURAL_LINK', 'RETRY', `Connection failed, retrying in ${delay}ms...`);
-                
-                setTimeout(() => {
-                    this.attemptConnection(config);
-                }, delay);
-            } else {
-                config.onStatusChange('ERROR', e.name === 'NotAllowedError' ? "Mic Access Denied" : e.message);
-                this.disconnect();
-            }
+        // Choose Engine
+        if (config.engine === 'GEMINI_REALTIME') {
+            await this.attemptGeminiConnection(config);
+        } else {
+            await this.startHybridSession(config);
         }
     }
 
-    private async initializeSession(config: NeuralLinkConfig) {
-        // 1. Initialize Audio Contexts
+    // --- ENGINE A: GOOGLE GEMINI REALTIME (WEBSOCKET) ---
+    private async attemptGeminiConnection(config: NeuralLinkConfig) {
+        try {
+            await this.initializeAudioContext();
+            
+            // 3. Initialize Mic
+            if (!this.activeStream) {
+                await this.setupMicrophone(this.currentMicMode);
+            }
+
+            // 4. API Client
+            const apiKey = KEY_MANAGER.getKey('GEMINI');
+            if (!apiKey) throw new Error("No healthy GEMINI API key available.");
+
+            const ai = new GoogleGenAI({ apiKey });
+            
+            let selectedVoice = config.voiceName;
+            if (!GOOGLE_VALID_VOICES.includes(selectedVoice)) {
+                selectedVoice = config.persona === 'hanisah' ? 'Kore' : 'Fenrir';
+            }
+
+            const liveTools: any[] = [{ googleSearch: {} }];
+            const functions = [...(noteTools.functionDeclarations || []), ...(visualTools?.functionDeclarations || [])];
+            if (functions.length > 0) liveTools.push({ functionDeclarations: functions });
+
+            debugService.log('INFO', 'NEURAL_LINK', 'CONNECTING', `Dialing Gemini Live...`);
+
+            const sessionPromise = ai.live.connect({
+                model: config.modelId,
+                callbacks: {
+                    onopen: () => {
+                        console.log("[NeuralLink] Socket Opened");
+                        this.isConnecting = false;
+                        this.isConnected = true;
+                        config.onStatusChange('ACTIVE');
+                        
+                        this.startAudioInputStream(sessionPromise);
+                        this.startWatchdog();
+
+                        // Context Init
+                        sessionPromise.then(session => {
+                            session.sendRealtimeInput({ text: `System initialized. Persona: ${config.persona}. Ready.` });
+                        });
+                    },
+                    onmessage: async (msg: LiveServerMessage) => {
+                        await this.handleServerMessage(msg, sessionPromise);
+                    },
+                    onerror: (e) => {
+                        console.error("Neural Link Socket Error:", e);
+                        if (this.isConnected) {
+                             config.onStatusChange('RECONNECTING');
+                             this.disconnect(true);
+                             // Simple retry
+                             setTimeout(() => this.attemptGeminiConnection(config), 2000);
+                        }
+                    },
+                    onclose: (e) => {
+                        console.log("Neural Link Socket Closed");
+                        if (this.isConnected) this.disconnect();
+                    },
+                },
+                config: {
+                    responseModalities: [Modality.AUDIO],
+                    tools: liveTools,
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } } },
+                    systemInstruction: config.systemInstruction,
+                }
+            });
+
+            this.session = await sessionPromise;
+        } catch (e: any) {
+            console.error("Neural Link Setup Failed:", e);
+            config.onStatusChange('ERROR', e.message);
+            this.disconnect();
+        }
+    }
+
+    // --- ENGINE B: HYDRA HYBRID (BROWSER STT + LLM + TTS) ---
+    // This is the "Stable" mode that doesn't rely on WebSockets
+    private async startHybridSession(config: NeuralLinkConfig) {
+        try {
+            await this.initializeAudioContext(); // Initialize for visualizer only
+            if (!this.activeStream) await this.setupMicrophone(this.currentMicMode); // Just for visualizer
+
+            this.isConnected = true;
+            this.isConnecting = false;
+            config.onStatusChange('ACTIVE');
+
+            // Hook up Browser Speech
+            browserSpeech.setLang(config.persona === 'hanisah' ? 'id-ID' : 'en-US');
+            
+            browserSpeech.startListening(async (text, isFinal) => {
+                if (config.onTranscription) {
+                    config.onTranscription({ text, source: 'user', isFinal });
+                }
+
+                if (isFinal && text.trim().length > 0) {
+                    // Stop listening while thinking/speaking to avoid echo
+                    browserSpeech.stopListening();
+                    config.onStatusChange('THINKING');
+                    
+                    try {
+                        // 1. Process with Kernel (Groq/Gemini Flash)
+                        // Use a fast model for "Live" feel
+                        const response = await HANISAH_KERNEL.execute(text, 'auto-best', []);
+                        
+                        if (config.onTranscription && response.text) {
+                            config.onTranscription({ text: response.text, source: 'model', isFinal: true });
+                        }
+
+                        // 2. Speak Response
+                        config.onStatusChange('SPEAKING');
+                        
+                        // Use Browser TTS for zero latency (or switch to ElevenLabs here if desired)
+                        browserSpeech.speak(response.text || "...", config.persona === 'hanisah' ? 'Google Bahasa Indonesia' : undefined, () => {
+                             // On finish speaking
+                             config.onStatusChange('ACTIVE');
+                             browserSpeech.startListening(this.onHybridResult.bind(this));
+                        });
+
+                    } catch (e) {
+                        config.onStatusChange('ACTIVE'); // Recover
+                        browserSpeech.startListening(this.onHybridResult.bind(this));
+                    }
+                }
+            });
+
+            // Start Audio Visualizer from Mic
+            if (this.inputCtx && this.activeStream) {
+                 const source = this.inputCtx.createMediaStreamSource(this.activeStream);
+                 if (this._analyser) source.connect(this._analyser);
+            }
+
+        } catch (e: any) {
+            config.onStatusChange('ERROR', e.message);
+        }
+    }
+
+    // Helper for Hybrid binding
+    private onHybridResult(text: string, isFinal: boolean) {
+        if (!this.config) return;
+        // Logic handled in closure above, this is placeholder for type safety if needed
+    }
+
+    // --- SHARED AUDIO INFRASTRUCTURE ---
+
+    private async initializeAudioContext() {
         const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
         
         if (!this.inputCtx || this.inputCtx.state === 'closed') {
             this.inputCtx = new AudioContextClass({ sampleRate: 16000 });
-            this.isWorkletLoaded = false; // Reset loaded flag on new context
+            this.isWorkletLoaded = false;
         }
         
         if (!this.outputCtx || this.outputCtx.state === 'closed') {
             this.outputCtx = new AudioContextClass({ sampleRate: 24000 });
             this._analyser = this.outputCtx.createAnalyser();
             this._analyser.fftSize = 512;
-            this._analyser.smoothingTimeConstant = 0.7;
-            this.ambientMixer = new AmbientMixer(this.outputCtx);
+            this._analyser.smoothingTimeConstant = 0.5;
         }
 
-        // Resume contexts
+        // Resume contexts (Critical for iOS)
         try {
             if (this.inputCtx.state === 'suspended') await this.inputCtx.resume();
             if (this.outputCtx.state === 'suspended') await this.outputCtx.resume();
         } catch (e) {}
 
-        // 2. Setup Audio Worklet (Background Processing)
-        if (!this.inputCtx.audioWorklet) {
-            throw new Error("AudioWorklet not supported in this browser.");
-        }
-        
-        // Prevent redundant loading which causes AbortError or NotSupportedError
-        if (!this.isWorkletLoaded) {
+        // Audio Worklet (Only needed for Gemini Realtime)
+        if (this.config?.engine === 'GEMINI_REALTIME' && !this.isWorkletLoaded && this.inputCtx.audioWorklet) {
             try {
                 const blob = new Blob([AUDIO_WORKLET_CODE], { type: 'application/javascript' });
                 const workletUrl = URL.createObjectURL(blob);
                 await this.inputCtx.audioWorklet.addModule(workletUrl);
                 this.isWorkletLoaded = true;
-            } catch (e: any) {
-                // If it fails, log warning but try to proceed to verification
-                // It might fail if already registered in some race conditions
-                console.warn("Worklet module load warning (possibly already registered):", e);
-            }
+            } catch (e) { console.warn("Worklet Load Warn", e); }
         }
-
-        // Verify processor registration by attempting to create a node
-        try {
-            const dummy = new AudioWorkletNode(this.inputCtx, 'pcm-worklet');
-            dummy.disconnect();
-            this.isWorkletLoaded = true;
-        } catch (e: any) {
-            throw new Error("Audio processor failed to initialize: " + e.message);
-        }
-
-        // 3. Initialize Mic
-        if (!this.activeStream) {
-            await this.setupMicrophone(this.currentMicMode);
-        }
-
-        // 4. API Client
-        const apiKey = KEY_MANAGER.getKey('GEMINI');
-        if (!apiKey) throw new Error("No healthy GEMINI API key available.");
-
-        const ai = new GoogleGenAI({ apiKey });
-        
-        // 5. Voice
-        let selectedVoice = config.voiceName;
-        if (!GOOGLE_VALID_VOICES.includes(selectedVoice)) {
-            selectedVoice = config.persona === 'hanisah' ? 'Kore' : 'Fenrir';
-        }
-
-        // 6. Tools
-        const liveTools: any[] = [{ googleSearch: {} }];
-        const functions = [...(noteTools.functionDeclarations || []), ...(visualTools?.functionDeclarations || [])];
-        if (functions.length > 0) liveTools.push({ functionDeclarations: functions });
-
-        // 7. Connect
-        debugService.log('INFO', 'NEURAL_LINK', 'CONNECTING', `Dialing Gemini Live...`);
-
-        const sessionPromise = ai.live.connect({
-            model: config.modelId,
-            callbacks: {
-                onopen: () => {
-                    console.log("[NeuralLink] Socket Opened");
-                    this.isConnecting = false;
-                    this.isConnected = true;
-                    config.onStatusChange('ACTIVE');
-                    
-                    this.startAudioInputStream(sessionPromise);
-                    
-                    // iOS Watchdog
-                    this.audioCheckInterval = setInterval(() => {
-                        if (this.outputCtx?.state === 'suspended') this.outputCtx.resume();
-                        if (this.inputCtx?.state === 'suspended') this.inputCtx.resume();
-                    }, 2000);
-
-                    // Context Init
-                    sessionPromise.then(session => {
-                        session.sendRealtimeInput({ text: `System initialized. Persona: ${config.persona}. Ready.` });
-                    });
-                },
-                onmessage: async (msg: LiveServerMessage) => {
-                    await this.handleServerMessage(msg, sessionPromise);
-                },
-                onerror: (e) => {
-                    console.error("Neural Link Socket Error:", e);
-                    if (this.isConnected) {
-                         config.onStatusChange('ERROR', "Connection Dropped");
-                         this.disconnect();
-                    }
-                },
-                onclose: (e) => {
-                    console.log("Neural Link Socket Closed");
-                    this.disconnect();
-                },
-            },
-            config: {
-                responseModalities: [Modality.AUDIO],
-                tools: liveTools,
-                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } } },
-                systemInstruction: config.systemInstruction,
-                inputAudioTranscription: { model: "google-1.0" }, 
-                outputAudioTranscription: { model: "google-1.0" },
-            }
-        });
-
-        this.session = await sessionPromise;
     }
 
-    async switchVoice(newVoice: string) {
-        if (!this.config || !this.isConnected) return;
-        this.disconnect(true);
-        this.config.voiceName = newVoice;
-        await this.connect(this.config);
+    private startWatchdog() {
+        this.audioCheckInterval = setInterval(() => {
+            if (this.outputCtx?.state === 'suspended') this.outputCtx.resume();
+            if (this.inputCtx?.state === 'suspended') this.inputCtx.resume();
+        }, 2000);
     }
 
     async setMicMode(mode: MicMode) {
         if (!this.isConnected || this.currentMicMode === mode) return;
         this.currentMicMode = mode;
         await this.setupMicrophone(mode);
-        if (this.session && this.inputCtx) {
+        if (this.session && this.inputCtx && this.config?.engine === 'GEMINI_REALTIME') {
              const sessionPromise = Promise.resolve(this.session);
              this.startAudioInputStream(sessionPromise);
-        }
-    }
-
-    setAmbientMode(mode: AmbientMode) {
-        if (this.ambientMixer) {
-            this.ambientMixer.setMode(mode);
         }
     }
 
@@ -369,12 +322,14 @@ export class NeuralLinkService {
             }
 
             const source = this.inputCtx.createMediaStreamSource(this.activeStream);
+            
+            // For Visualizer
+            if (this._analyser) source.connect(this._analyser);
+
             this.workletNode = new AudioWorkletNode(this.inputCtx, 'pcm-worklet');
             
-            // Handle data from worklet thread
             this.workletNode.port.onmessage = (event) => {
                 if (!this.isConnected) return;
-
                 const inputData = event.data as Float32Array;
                 
                 // VAD Gate
@@ -399,8 +354,6 @@ export class NeuralLinkService {
             };
             
             source.connect(this.workletNode);
-            // Must connect to destination to keep processing alive in some browsers, 
-            // but gain is 0 to prevent feedback loop
             this.workletNode.connect(this.inputCtx.destination);
             
         } catch (err) {
@@ -409,77 +362,35 @@ export class NeuralLinkService {
     }
 
     private async handleServerMessage(msg: LiveServerMessage, sessionPromise: Promise<any>) {
-        // 1. Transcription
+        // Transcription handling...
         if (this.config?.onTranscription) {
             if (msg.serverContent?.inputTranscription) {
-                this.config.onTranscription({ 
-                    text: msg.serverContent.inputTranscription.text, 
-                    source: 'user', 
-                    isFinal: !!msg.serverContent.turnComplete 
-                });
+                this.config.onTranscription({ text: msg.serverContent.inputTranscription.text, source: 'user', isFinal: !!msg.serverContent.turnComplete });
             }
             if (msg.serverContent?.outputTranscription) {
-                this.config.onTranscription({ 
-                    text: msg.serverContent.outputTranscription.text, 
-                    source: 'model', 
-                    isFinal: !!msg.serverContent.turnComplete 
-                });
+                this.config.onTranscription({ text: msg.serverContent.outputTranscription.text, source: 'model', isFinal: !!msg.serverContent.turnComplete });
             }
         }
 
-        // 2. Tool Execution
-        if (msg.toolCall) {
-            for (const fc of msg.toolCall.functionCalls) {
-                if (this.config?.onToolCall) {
-                    try {
-                        const result = await this.config.onToolCall(fc);
-                        sessionPromise.then(s => s.sendToolResponse({ 
-                            functionResponses: [{ id: fc.id, name: fc.name, response: { result: String(result) } }] 
-                        })).catch(e => console.error("Tool Response Error", e));
-                    } catch (err) {
-                        sessionPromise.then(s => s.sendToolResponse({
-                            functionResponses: [{ id: fc.id, name: fc.name, response: { result: "Error executing tool" } }]
-                        }));
-                    }
-                }
-            }
-        }
-
-        // 3. Audio Playback
+        // Audio Playback
         const base64Audio = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
         if (base64Audio && this.outputCtx) {
             try {
                 if (this.outputCtx.state === 'suspended') await this.outputCtx.resume();
-
                 const currentTime = this.outputCtx.currentTime;
-                if (this.nextStartTime < currentTime) {
-                    this.nextStartTime = currentTime + 0.05; 
-                }
+                if (this.nextStartTime < currentTime) this.nextStartTime = currentTime + 0.05;
 
                 const audioBuffer = await decodeAudioData(decodeAudio(base64Audio), this.outputCtx, 24000, 1);
                 const source = this.outputCtx.createBufferSource();
                 source.buffer = audioBuffer;
-                
-                if (this._analyser) { 
-                    source.connect(this._analyser); 
-                    this._analyser.connect(this.outputCtx.destination); 
-                } else {
-                    source.connect(this.outputCtx.destination);
-                }
+                if (this._analyser) source.connect(this._analyser);
+                source.connect(this.outputCtx.destination);
                 
                 source.start(this.nextStartTime);
                 this.nextStartTime += audioBuffer.duration;
                 this.sources.add(source);
-                
                 source.onended = () => this.sources.delete(source);
             } catch (e) { }
-        }
-
-        // Handle Interruption
-        if (msg.serverContent?.interrupted) {
-            this.sources.forEach(s => { try { s.stop(); } catch(e){} });
-            this.sources.clear();
-            if (this.outputCtx) this.nextStartTime = this.outputCtx.currentTime;
         }
     }
 
@@ -492,6 +403,11 @@ export class NeuralLinkService {
             this.audioCheckInterval = null;
         }
         
+        // Cleanup Hybrid
+        browserSpeech.stopListening();
+        browserSpeech.cancelSpeak();
+        
+        // Cleanup Gemini
         if (this.session) { 
             try { if(typeof this.session.close === 'function') this.session.close(); } catch(e){} 
             this.session = null; 
@@ -503,17 +419,12 @@ export class NeuralLinkService {
         }
 
         if (this.workletNode) {
-            this.workletNode.disconnect();
+            try { this.workletNode.disconnect(); } catch(e) {}
             this.workletNode = null;
         }
 
-        if (this.ambientMixer) {
-            this.ambientMixer.stop();
-        }
-
         if (this.inputCtx && this.inputCtx.state === 'running') { try { this.inputCtx.suspend(); } catch(e){} }
-        if (this.outputCtx && this.outputCtx.state === 'running') { try { this.outputCtx.suspend(); } catch(e){} }
-
+        
         this.sources.forEach(s => { try { s.stop(); } catch(e){} });
         this.sources.clear();
         this.nextStartTime = 0;

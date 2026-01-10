@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { NeuralLinkService } from '../services/neuralLink';
-import type { NeuralLinkStatus, MicMode, AmbientMode } from '../services/neuralLink';
+import type { NeuralLinkStatus, MicMode, AmbientMode, EngineType } from '../services/neuralLink';
 import { executeNeuralTool } from '../features/aiChat/services/toolHandler';
 import type { Note } from '../types';
 import { debugService } from '../services/debugService';
@@ -18,11 +18,13 @@ interface LiveSessionContextType {
     micMode: MicMode;
     ambientMode: AmbientMode;
     currentVoice: string;
+    engine: EngineType; // ADDED
     startSession: (persona: 'hanisah' | 'stoic') => void;
     stopSession: () => void;
     toggleMinimize: () => void;
     setMicMode: (mode: MicMode) => void;
     setAmbientMode: (mode: AmbientMode) => void;
+    setEngine: (engine: EngineType) => void; // ADDED
     changeVoice: (voice: string) => void;
 }
 
@@ -50,12 +52,14 @@ export const LiveSessionProvider: React.FC<LiveSessionProviderProps> = ({ childr
     const [transcript, setTranscript] = useState<Array<{ role: 'user' | 'model', text: string }>>([]);
     const [interimTranscript, setInterimTranscript] = useState<{ role: 'user' | 'model', text: string } | null>(null);
     const transcriptUpdateBuffer = useRef<{ role: 'user' | 'model', text: string, isFinal: boolean } | null>(null);
-    const lastUpdateTs = useRef(0);
 
     const [activeTool, setActiveTool] = useState<string | null>(null);
     const [currentVoice, setCurrentVoice] = useState('Puck');
     const [micMode, setMicModeState] = useState<MicMode>('STANDARD');
     const [ambientMode, setAmbientModeState] = useState<AmbientMode>('OFF');
+    
+    // Default to HYDRA_HYBRID for maximum free stability, user can switch to GEMINI_REALTIME
+    const [engine, setEngine] = useState<EngineType>('HYDRA_HYBRID');
 
     const neuralLink = useRef<NeuralLinkService>(new NeuralLinkService());
 
@@ -66,7 +70,6 @@ export const LiveSessionProvider: React.FC<LiveSessionProviderProps> = ({ childr
     }, []);
 
     // THROTTLED TRANSCRIPT UPDATER
-    // Prevents UI jitter by batching updates to 15fps max (approx 60ms)
     useEffect(() => {
         const interval = setInterval(() => {
             if (transcriptUpdateBuffer.current) {
@@ -108,18 +111,18 @@ export const LiveSessionProvider: React.FC<LiveSessionProviderProps> = ({ childr
                 persona,
                 systemInstruction: liveInstruction,
                 voiceName: voice,
+                engine: engine, // Pass active engine
                 onStatusChange: (newStatus, err) => {
                     setStatus(newStatus);
                     if (newStatus === 'ERROR') {
-                        setIsLive(false);
+                        // Don't auto-close immediately on error, allow user to see it or retry
                         debugService.log('ERROR', 'LIVE_CTX', 'CONNECT_FAIL', err || 'Unknown');
                     } else if (newStatus === 'ACTIVE') {
                         neuralLink.current.setMicMode(micMode);
-                        neuralLink.current.setAmbientMode(ambientMode);
                     }
                 },
                 onTranscription: (event) => {
-                    // Push to buffer instead of direct state update
+                    // Push to buffer
                     transcriptUpdateBuffer.current = {
                         role: event.source,
                         text: event.text,
@@ -149,7 +152,7 @@ export const LiveSessionProvider: React.FC<LiveSessionProviderProps> = ({ childr
             setIsLive(false);
             setStatus('ERROR');
         }
-    }, [isLive, micMode, ambientMode, setNotes]); 
+    }, [isLive, micMode, ambientMode, setNotes, engine]); 
 
     const stopSession = useCallback(() => {
         neuralLink.current.disconnect();
@@ -170,7 +173,7 @@ export const LiveSessionProvider: React.FC<LiveSessionProviderProps> = ({ childr
 
     const setAmbientMode = useCallback((mode: AmbientMode) => {
         setAmbientModeState(mode);
-        if (isLive) neuralLink.current.setAmbientMode(mode);
+        // Implement ambient mode in neuralLink if needed later
     }, [isLive]);
 
     const changeVoice = useCallback((voice: string) => {
@@ -189,15 +192,17 @@ export const LiveSessionProvider: React.FC<LiveSessionProviderProps> = ({ childr
         micMode,
         ambientMode,
         currentVoice,
+        engine,
         startSession,
         stopSession,
         toggleMinimize,
         setMicMode,
         setAmbientMode,
+        setEngine,
         changeVoice
     }), [
-        isLive, isMinimized, status, transcript, interimTranscript, activeTool, micMode, ambientMode, currentVoice,
-        startSession, stopSession, toggleMinimize, setMicMode, setAmbientMode, changeVoice
+        isLive, isMinimized, status, transcript, interimTranscript, activeTool, micMode, ambientMode, currentVoice, engine,
+        startSession, stopSession, toggleMinimize, setMicMode, setAmbientMode, setEngine, changeVoice
     ]);
 
     return (

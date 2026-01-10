@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Flame, Brain, MicOff, Radio, X, Mic, Activity, Minus, Sparkles, Shield, CloudRain, Music, Volume2, Waves, Settings2 } from 'lucide-react';
+import { Flame, Brain, MicOff, Radio, X, Mic, Activity, Minus, Sparkles, Shield, CloudRain, Music, Volume2, Waves, Settings2, Zap, CloudOff } from 'lucide-react';
 import { type NeuralLinkStatus } from '../../../services/neuralLink';
 import { useFeatures } from '../../../contexts/FeatureContext';
 import { useLiveSession } from '../../../contexts/LiveSessionContext';
@@ -36,7 +36,7 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [showVoiceSelector, setShowVoiceSelector] = useState(false);
 
-  const { micMode, setMicMode, ambientMode, setAmbientMode, currentVoice, changeVoice } = useLiveSession();
+  const { micMode, setMicMode, currentVoice, changeVoice, engine, setEngine } = useLiveSession();
   const { isFeatureEnabled } = useFeatures();
   const isVisualEngineEnabled = isFeatureEnabled('VISUAL_ENGINE');
 
@@ -128,7 +128,7 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
   return (
     <div className="fixed inset-0 z-[5000] bg-black flex flex-col animate-fade-in font-sans touch-none transform-gpu will-change-transform">
       
-      {/* 1. VISUALIZER LAYER (GPU ACCELERATED) */}
+      {/* 1. VISUALIZER LAYER */}
       {isVisualEngineEnabled && (
           <canvas 
             ref={canvasRef} 
@@ -140,9 +140,9 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 transition-transform duration-100 ease-out transform-gpu will-change-transform"
            style={{ transform: `scale(${1 + (volume / 256) * 0.15})` }}
       >
-          <div className={`relative w-[280px] h-[280px] rounded-full blur-[80px] opacity-40 animate-pulse ${personaMode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500'}`}></div>
+          <div className={`relative w-[280px] h-[280px] rounded-full blur-[80px] opacity-40 animate-pulse ${personaMode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500'} ${status === 'THINKING' ? 'animate-ping' : ''}`}></div>
           <div className="absolute inset-0 flex items-center justify-center">
-               <div className={`w-32 h-32 rounded-full border-2 border-white/20 flex items-center justify-center backdrop-blur-md shadow-[0_0_50px_rgba(255,255,255,0.1)] ${status === 'ACTIVE' ? 'animate-[spin_10s_linear_infinite]' : ''}`}>
+               <div className={`w-32 h-32 rounded-full border-2 border-white/20 flex items-center justify-center backdrop-blur-md shadow-[0_0_50px_rgba(255,255,255,0.1)] ${status === 'ACTIVE' || status === 'SPEAKING' ? 'animate-[spin_10s_linear_infinite]' : ''}`}>
                     {personaMode === 'hanisah' ? <Flame size={48} className="text-white opacity-80" /> : <Brain size={48} className="text-white opacity-80" />}
                </div>
           </div>
@@ -155,10 +155,27 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
           <div className="p-6 pt-safe flex justify-between items-center pointer-events-auto">
               <div className="flex items-center gap-4">
                   <div className={`px-4 py-2 rounded-full border bg-black/40 backdrop-blur-md flex items-center gap-2 ${status === 'ERROR' ? 'border-red-500 text-red-500' : 'border-white/10 text-white'}`}>
-                      <Radio size={16} className={status === 'ACTIVE' ? 'animate-pulse text-green-400' : ''} />
-                      <span className="text-xs font-black uppercase tracking-widest">{status}</span>
+                      <Radio size={16} className={status === 'ACTIVE' || status === 'SPEAKING' ? 'animate-pulse text-green-400' : ''} />
+                      <span className="text-xs font-black uppercase tracking-widest">{status === 'SPEAKING' ? 'TALKING' : status}</span>
+                  </div>
+                  
+                  {/* ENGINE TOGGLE */}
+                  <div className="hidden md:flex bg-black/40 border border-white/10 rounded-full p-1">
+                      <button 
+                        onClick={() => setEngine('GEMINI_REALTIME')} 
+                        className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all ${engine === 'GEMINI_REALTIME' ? 'bg-white text-black' : 'text-neutral-500 hover:text-white'}`}
+                      >
+                         <Zap size={10} /> FAST
+                      </button>
+                      <button 
+                        onClick={() => setEngine('HYDRA_HYBRID')} 
+                        className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all ${engine === 'HYDRA_HYBRID' ? 'bg-white text-black' : 'text-neutral-500 hover:text-white'}`}
+                      >
+                         <Shield size={10} /> STABLE
+                      </button>
                   </div>
               </div>
+
               <div className="flex items-center gap-2">
                   <button onClick={onMinimize} className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all border border-white/5 active:scale-90" title="Minimize"><Minus size={20} /></button>
                   <button onClick={onTerminate} className="w-12 h-12 rounded-full bg-white/10 hover:bg-red-500/20 text-white hover:text-red-500 flex items-center justify-center transition-all border border-white/5 active:scale-90" title="End Call"><X size={20} /></button>
@@ -188,9 +205,9 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
                       </div>
                   </div>
               )}
-              {!interimTranscript && !activeTool && status === 'ACTIVE' && (
+              {!interimTranscript && !activeTool && (status === 'ACTIVE' || status === 'SPEAKING' || status === 'THINKING') && (
                   <div className="text-center text-white/40 text-xs font-mono uppercase tracking-widest animate-pulse mt-4">
-                      {isSpeaking ? 'NEURAL ENGINE RESPONDING...' : (micMode === 'ISOLATION' ? 'VOICE ISOLATION ACTIVE' : 'LISTENING...')}
+                      {status === 'THINKING' ? 'NEURAL ENGINE PROCESSING...' : status === 'SPEAKING' ? 'SPEAKING...' : (micMode === 'ISOLATION' ? 'VOICE ISOLATION ACTIVE' : 'LISTENING...')}
                   </div>
               )}
           </div>
@@ -203,16 +220,20 @@ export const NeuralLinkOverlay: React.FC<NeuralLinkOverlayProps> = ({
                       <span className="text-[8px] font-black uppercase">{currentVoice}</span>
                   </button>
                   <div className="w-[1px] h-8 bg-white/10 mx-1"></div>
-                  <button onClick={() => setMicMode(micMode === 'ISOLATION' ? 'STANDARD' : 'ISOLATION')} className={`p-3 rounded-xl transition-all flex flex-col items-center gap-1 w-20 ${micMode === 'ISOLATION' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'hover:bg-white/5 text-neutral-400'}`}>
-                      <Shield size={18} />
-                      <span className="text-[8px] font-black uppercase">ISOLATE</span>
+                  
+                  {/* ENGINE TOGGLE (Mobile) */}
+                  <button onClick={() => setEngine(engine === 'GEMINI_REALTIME' ? 'HYDRA_HYBRID' : 'GEMINI_REALTIME')} className={`p-3 rounded-xl transition-all flex flex-col items-center gap-1 w-20 ${engine === 'GEMINI_REALTIME' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'hover:bg-white/5 text-neutral-400'}`}>
+                      {engine === 'GEMINI_REALTIME' ? <Zap size={18} /> : <Shield size={18} />}
+                      <span className="text-[8px] font-black uppercase">{engine === 'GEMINI_REALTIME' ? 'FAST' : 'STABLE'}</span>
                   </button>
+                  
                   <div className="w-[1px] h-8 bg-white/10 mx-1"></div>
-                  <div className="flex gap-1">
-                      <button onClick={() => setAmbientMode('OFF')} className={`p-2 rounded-lg ${ambientMode === 'OFF' ? 'bg-white/20 text-white' : 'text-neutral-500 hover:text-white'}`}><Volume2 size={16}/></button>
-                      <button onClick={() => setAmbientMode('CYBER')} className={`p-2 rounded-lg ${ambientMode === 'CYBER' ? 'bg-purple-500/20 text-purple-400' : 'text-neutral-500 hover:text-purple-400'}`}><Waves size={16}/></button>
-                      <button onClick={() => setAmbientMode('RAIN')} className={`p-2 rounded-lg ${ambientMode === 'RAIN' ? 'bg-blue-500/20 text-blue-400' : 'text-neutral-500 hover:text-blue-400'}`}><CloudRain size={16}/></button>
-                  </div>
+                  
+                  {/* RECONNECT (Force) */}
+                  <button onClick={() => { setEngine(engine === 'GEMINI_REALTIME' ? 'HYDRA_HYBRID' : 'GEMINI_REALTIME'); setTimeout(() => setEngine(engine), 100); }} className="p-3 rounded-xl hover:bg-white/5 text-neutral-500 hover:text-red-400 flex flex-col items-center gap-1 w-16" title="Emergency Reset">
+                       <CloudOff size={18} />
+                       <span className="text-[8px] font-black uppercase">RESET</span>
+                  </button>
               </div>
           </div>
 
