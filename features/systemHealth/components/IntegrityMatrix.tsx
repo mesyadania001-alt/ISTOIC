@@ -7,12 +7,12 @@ import {
 import { debugService, type UIStatus } from '../../../services/debugService';
 import { useFeatures, type SystemFeature } from '../../../contexts/FeatureContext';
 
-// --- UI ELEMENT NODE (Existing Logic) ---
+// --- UI ELEMENT NODE ---
 const UIElementNode: React.FC<{ id: string, status: UIStatus, errors: number, usage: number, onToggle: () => void }> = ({ id, status, errors, usage, onToggle }) => {
     const getStatusColor = () => {
-        if (status === 'DISABLED') return 'bg-red-500/10 border-red-500 text-red-500';
-        if (status === 'UNSTABLE') return 'bg-yellow-500/10 border-yellow-500 text-yellow-500 animate-pulse';
-        return 'bg-emerald-500/10 border-emerald-500 text-emerald-500';
+        if (status === 'DISABLED') return 'bg-red-900/10 border-red-500/50 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]';
+        if (status === 'UNSTABLE') return 'bg-amber-900/10 border-amber-500/50 text-amber-500 animate-pulse';
+        return 'bg-emerald-900/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-500/50 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]';
     };
 
     const cleanName = id.replace(/UI_|BTN_/g, '').replace(/_/g, ' ');
@@ -21,29 +21,37 @@ const UIElementNode: React.FC<{ id: string, status: UIStatus, errors: number, us
         <div 
             onClick={onToggle}
             className={`
-                relative p-3 rounded-xl border transition-all cursor-pointer group select-none
-                ${getStatusColor()} hover:scale-[1.02] active:scale-95
+                relative p-3 rounded-lg border transition-all cursor-pointer group select-none flex flex-col justify-between h-24
+                ${getStatusColor()} active:scale-95 backdrop-blur-sm
             `}
         >
-            <div className="flex justify-between items-start mb-2">
-                <div className="p-1.5 rounded-lg bg-black/20">
-                    {status === 'DISABLED' ? <ToggleLeft size={14} /> : <ToggleRight size={14} />}
+            <div className="absolute top-1 right-1 opacity-20">
+                <LayoutGrid size={40} strokeWidth={0.5} />
+            </div>
+
+            <div className="flex justify-between items-start relative z-10">
+                <div className="text-[8px] font-mono opacity-70">
+                    ERR: <span className={errors > 0 ? "text-red-400 font-bold" : ""}>{errors}</span>
                 </div>
-                <div className="text-[9px] font-mono opacity-70">
-                    ERR:{errors} | USE:{usage}
+                <div className="p-1 rounded bg-black/40 text-white/50">
+                    {status === 'DISABLED' ? <ToggleLeft size={12} /> : <ToggleRight size={12} />}
                 </div>
             </div>
-            <div className="text-[10px] font-black uppercase tracking-wider truncate" title={id}>
-                {cleanName}
-            </div>
-            <div className="text-[8px] font-mono mt-1 opacity-60">
-                {status}
+            
+            <div className="relative z-10">
+                <div className="text-[9px] font-black uppercase tracking-wider truncate mb-1" title={id}>
+                    {cleanName}
+                </div>
+                <div className="flex items-center gap-2">
+                     <div className={`w-1.5 h-1.5 rounded-full ${status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                     <span className="text-[7px] font-mono opacity-80">{usage} INTERACTIONS</span>
+                </div>
             </div>
         </div>
     );
 };
 
-// --- FEATURE TOGGLE CARD (New "Heavy Features" Logic) ---
+// --- FEATURE TOGGLE CARD ---
 const FeatureToggleCard: React.FC<{ 
     id: SystemFeature, 
     label: string, 
@@ -55,13 +63,15 @@ const FeatureToggleCard: React.FC<{
     <button 
         onClick={onToggle}
         className={`
-            w-full flex items-center justify-between p-4 rounded-xl border transition-all group text-left
+            w-full flex items-center justify-between p-4 rounded-xl border transition-all group text-left relative overflow-hidden
             ${isEnabled 
-                ? 'bg-blue-500/10 border-blue-500/30' 
-                : 'bg-zinc-900 border-white/5 opacity-60 hover:opacity-100'}
+                ? 'bg-blue-600/10 border-blue-500/30' 
+                : 'bg-zinc-900/50 border-white/5 opacity-60 hover:opacity-100'}
         `}
     >
-        <div className="flex items-center gap-4">
+        {isEnabled && <div className="absolute inset-0 bg-blue-500/5 animate-pulse pointer-events-none"></div>}
+
+        <div className="flex items-center gap-4 relative z-10">
             <div className={`p-2.5 rounded-lg transition-colors ${isEnabled ? 'bg-blue-500 text-white shadow-[0_0_15px_var(--accent-glow)]' : 'bg-white/5 text-neutral-500'}`}>
                 {icon}
             </div>
@@ -72,7 +82,7 @@ const FeatureToggleCard: React.FC<{
                 <p className="text-[9px] text-neutral-500 font-mono mt-0.5">{desc}</p>
             </div>
         </div>
-        <div className={`transition-colors ${isEnabled ? 'text-blue-400' : 'text-neutral-600'}`}>
+        <div className={`transition-colors relative z-10 ${isEnabled ? 'text-blue-400' : 'text-neutral-600'}`}>
             {isEnabled ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
         </div>
     </button>
@@ -96,8 +106,12 @@ export const IntegrityMatrix: React.FC = () => {
     return (
         <div className="flex-1 overflow-y-auto p-6 md:p-8 relative z-20 bg-[#0a0a0b] rounded-[32px] border border-white/5 shadow-2xl animate-slide-up">
             
-            {/* SECTION 1: KERNEL PROTOCOLS (Heavy Features) */}
-            <div className="mb-8">
+            {/* Background Circuit Pattern */}
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none"></div>
+            <div className="absolute top-0 right-0 w-full h-full bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
+
+            {/* SECTION 1: KERNEL PROTOCOLS */}
+            <div className="mb-8 relative z-10">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                         <Shield size={18} className="text-blue-500" />
@@ -150,21 +164,21 @@ export const IntegrityMatrix: React.FC = () => {
                 </div>
             </div>
 
-            <div className="h-[1px] bg-white/5 my-6"></div>
+            <div className="h-[1px] bg-white/5 my-6 relative z-10"></div>
 
-            {/* SECTION 2: UI GOVERNANCE (Element Integrity) */}
-            <div className="flex items-center justify-between mb-6">
+            {/* SECTION 2: UI GOVERNANCE */}
+            <div className="flex items-center justify-between mb-6 relative z-10">
                 <div className="flex items-center gap-3">
-                    <LayoutGrid size={18} className="text-accent" />
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">UI_GOVERNANCE</h3>
+                    <LayoutGrid size={18} className="text-emerald-500" />
+                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">UI_GOVERNANCE_MATRIX</h3>
                 </div>
                 <div className="flex items-center gap-2 text-[9px] text-neutral-500 font-mono">
-                    <Info size={12} className="text-accent" />
-                    <span>RED = User Disabled | YELLOW = Unstable</span>
+                    <Info size={12} className="text-emerald-500" />
+                    <span>TAP TO TOGGLE NODES</span>
                 </div>
             </div>
             
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 relative z-10">
                 {Object.values(uiMatrix).map((el: any) => (
                     <UIElementNode 
                         key={el.id}

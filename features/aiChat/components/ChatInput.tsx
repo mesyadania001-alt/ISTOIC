@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, memo, useCallback, useMemo } from 'react';
-import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, Paperclip, X, Image as ImageIcon, Flame, Brain, CornerDownLeft, Clipboard, ShieldCheck, FileText, Square, Globe, Palette } from 'lucide-react';
+import { Send, Plus, Loader2, Mic, MicOff, Database, DatabaseZap, Paperclip, X, Image as ImageIcon, Flame, Brain, CornerDownLeft, Clipboard, ShieldCheck, FileText, Square, Globe, Palette, Smile } from 'lucide-react';
 import { TRANSLATIONS, getLang } from '../../../services/i18n';
 import { debugService } from '../../../services/debugService';
 import { UI_REGISTRY, FN_REGISTRY } from '../../../constants/registry';
@@ -26,6 +26,15 @@ interface ChatInputProps {
 }
 
 const MAX_CHARS = 4000;
+
+// Emoji Data Configuration
+const EMOJI_CATEGORIES = {
+  'TECH': ['🤖', '⚡', '🧠', '💾', '📱', '💻', '🔋', '📡', '💎', '🚀', '🛸', '🌌', '🔧', '⚙️', '🔒', '🛡️'],
+  'VIBE': ['✨', '🔥', '💀', '👀', '💯', '🗿', '🍷', '🎨', '🎭', '🎪', '🎲', '🎱', '🎯', '🔮', '🧬'],
+  'FACE': ['🤔', '🤯', '😎', '🫡', '🫠', '🤖', '👾', '🤡', '🤠', '🤐', '🤫', '🧐', '🥹', '🤩', '😤'],
+  'HAND': ['👍', '👎', '👋', '🤝', '🙌', '🫶', '🫱🏻‍🫲🏼', '✍️', '🦾', '💪', '🙏', '☝️', '🤌', '🤘', '🤏'],
+  'SIGN': ['✅', '❌', '⚠️', '🚫', '🔴', '🟢', '🔷', '🔶', '❓', '❗', '♻️', '➡️', '🎵', '💲', '™️']
+};
 
 export const ChatInput: React.FC<ChatInputProps> = memo(({
   input,
@@ -53,6 +62,10 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   const [attachment, setAttachment] = useState<{ file?: File, preview: string, base64: string, mimeType: string } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [pasteFlash, setPasteFlash] = useState(false);
+  
+  // Emoji State
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [activeEmojiCategory, setActiveEmojiCategory] = useState<keyof typeof EMOJI_CATEGORIES>('TECH');
   
   const recognitionRef = useRef<any>(null);
   const currentLang = getLang();
@@ -113,6 +126,24 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
       
       setPasteFlash(true);
       setTimeout(() => setPasteFlash(false), 500);
+  };
+
+  const handleInsertEmoji = (emoji: string) => {
+      if (inputRef.current) {
+          const start = inputRef.current.selectionStart;
+          const end = inputRef.current.selectionEnd;
+          const newValue = input.substring(0, start) + emoji + input.substring(end);
+          setInput(newValue);
+          
+          setTimeout(() => {
+              if (inputRef.current) {
+                  inputRef.current.selectionStart = inputRef.current.selectionEnd = start + emoji.length;
+                  inputRef.current.focus();
+              }
+          }, 0);
+      } else {
+          setInput(prev => prev + emoji);
+      }
   };
 
   const toggleDictation = useCallback((e: React.MouseEvent) => {
@@ -257,6 +288,42 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
   return (
     <div className="w-full relative group" style={{ willChange: 'transform' }}>
       
+      {/* Backdrop for Emoji Picker */}
+      {showEmojiPicker && (
+          <div className="fixed inset-0 z-20" onClick={() => setShowEmojiPicker(false)}></div>
+      )}
+
+      {/* Emoji Picker Popover */}
+      {showEmojiPicker && (
+          <div className="absolute bottom-[110%] left-0 w-full sm:w-80 bg-white/95 dark:bg-[#0a0a0b]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-[24px] shadow-2xl z-30 animate-slide-up flex flex-col overflow-hidden ring-1 ring-white/5">
+              <div className="flex p-1 border-b border-black/5 dark:border-white/5 overflow-x-auto no-scrollbar">
+                  {Object.keys(EMOJI_CATEGORIES).map((cat) => (
+                      <button
+                          key={cat}
+                          onClick={() => setActiveEmojiCategory(cat as any)}
+                          className={`
+                              flex-1 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all
+                              ${activeEmojiCategory === cat ? 'bg-black/5 dark:bg-white/10 text-black dark:text-white' : 'text-neutral-500 hover:text-black dark:hover:text-white'}
+                          `}
+                      >
+                          {cat}
+                      </button>
+                  ))}
+              </div>
+              <div className="p-3 grid grid-cols-5 gap-1 max-h-48 overflow-y-auto custom-scroll">
+                  {EMOJI_CATEGORIES[activeEmojiCategory].map((emoji) => (
+                      <button
+                          key={emoji}
+                          onClick={() => handleInsertEmoji(emoji)}
+                          className="h-10 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+                      >
+                          {emoji}
+                      </button>
+                  ))}
+              </div>
+          </div>
+      )}
+
       {/* Dictation Overlay Indicator */}
       {isDictating && (
           <div className="absolute -top-20 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 animate-fade-in z-20 pointer-events-none">
@@ -392,6 +459,19 @@ export const ChatInput: React.FC<ChatInputProps> = memo(({
                     <Paperclip size={18} strokeWidth={2.5} />
                 </button>
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} accept="image/*" />
+
+                {/* Emoji Picker Button */}
+                <button 
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 border
+                        ${showEmojiPicker
+                            ? 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20'
+                            : 'bg-zinc-100 dark:bg-white/5 border-transparent text-neutral-500 hover:text-yellow-500 hover:bg-yellow-500/10'
+                        }`}
+                    title="Insert Emoji"
+                >
+                    <Smile size={18} strokeWidth={2.5} />
+                </button>
 
                 {/* Pollinations.ai Flux Trigger */}
                 <button 

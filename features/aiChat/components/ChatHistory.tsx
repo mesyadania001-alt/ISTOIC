@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { X, History, Trash2, Plus, Search, Edit3, MessageSquare, Flame, Brain, ChevronRight, Pin, PinOff } from 'lucide-react';
+import { GroupedVirtuoso } from 'react-virtuoso';
 import { type ChatThread } from '../../../types';
 import { debugService } from '../../../services/debugService';
 import { UI_REGISTRY, FN_REGISTRY } from '../../../constants/registry';
@@ -62,7 +63,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
       });
   }, [threads, searchQuery]);
 
-  const groups = useMemo(() => {
+  const { flatData, groupCounts, groupNames } = useMemo(() => {
     const result: Record<string, ChatThread[]> = {
       'PINNED': [],
       'TODAY': [],
@@ -91,7 +92,19 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
       else result['ARCHIVED LOGS'].push(t);
     });
 
-    return result;
+    const flatData: ChatThread[] = [];
+    const groupCounts: number[] = [];
+    const groupNames: string[] = [];
+    
+    ['PINNED', 'TODAY', 'YESTERDAY', 'PREVIOUS 7 DAYS', 'ARCHIVED LOGS'].forEach(key => {
+        if (result[key].length > 0) {
+            flatData.push(...result[key]);
+            groupCounts.push(result[key].length);
+            groupNames.push(key);
+        }
+    });
+
+    return { flatData, groupCounts, groupNames };
   }, [filteredThreads]);
 
   const handleStartRename = (e: React.MouseEvent, t: ChatThread) => {
@@ -169,137 +182,138 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
         </div>
 
         {/* LIST CONTENT */}
-        <div className="flex-1 overflow-y-auto custom-scroll p-4 space-y-8">
-          {(Object.entries(groups) as [string, ChatThread[]][]).map(([label, items]) => {
-            if (items.length === 0) return null;
-            return (
-              <div key={label} className="animate-fade-in">
-                <div className="flex items-center gap-3 mb-3 px-2 opacity-50">
-                    <span className={`text-[8px] font-black tracking-[0.3em] uppercase ${label === 'PINNED' ? 'text-accent flex items-center gap-1' : 'text-neutral-500'}`}>
-                      {label === 'PINNED' && <Pin size={10} className="inline" />}
-                      {label}
-                    </span>
-                    <div className="h-[1px] flex-1 bg-black/10 dark:bg-white/10"></div>
-                </div>
-                
-                <div className="space-y-2">
-                  {items.map(t => {
-                    const isActive = activeThreadId === t.id;
-                    const isEditing = editingId === t.id;
-                    const ModelIcon = t.persona === 'hanisah' ? Flame : Brain;
-                    
-                    return (
-                      <div 
-                        key={t.id}
-                        onClick={() => { if (!isEditing) { onSelectThread(t.id); if(window.innerWidth < 768) onClose(); } }}
-                        className={`
-                          group relative p-3.5 rounded-[16px] border transition-all duration-300 cursor-pointer overflow-hidden
-                          ${isActive 
-                            ? 'bg-white dark:bg-white/[0.08] border-accent/40 shadow-lg shadow-accent/5 ring-1 ring-accent/20' 
-                            : 'bg-transparent border-transparent hover:bg-zinc-100 dark:hover:bg-white/[0.03] hover:border-black/5 dark:hover:border-white/5'
-                          }
-                        `}
-                      >
-                        {/* Active Indicator Bar */}
-                        {isActive && (
-                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent shadow-[0_0_10px_var(--accent-color)]"></div>
-                        )}
-
-                        <div className="flex items-center gap-4 relative z-10">
-                          {/* Icon Container */}
-                          <div className={`
-                            w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all
-                            ${isActive 
-                                ? 'bg-accent text-black shadow-md' 
-                                : 'bg-zinc-200 dark:bg-white/5 text-neutral-400 group-hover:text-black dark:group-hover:text-white'
-                            }
-                          `}>
-                             <ModelIcon size={18} />
-                          </div>
-
-                          {/* Text Content */}
-                          <div className="flex-1 min-w-0">
-                            {isEditing ? (
-                              <form onSubmit={handleCommitRename} className="flex items-center gap-2">
-                                <input 
-                                  autoFocus
-                                  value={editValue}
-                                  onChange={(e) => setEditValue(e.target.value)}
-                                  onBlur={handleCommitRename}
-                                  className="bg-transparent border-b border-accent w-full text-[11px] font-black uppercase outline-none py-1 text-black dark:text-white"
-                                />
-                              </form>
-                            ) : (
-                              <>
-                                <div className="flex items-center justify-between mb-1">
-                                    <p className={`text-[11px] font-bold uppercase tracking-tight truncate leading-tight flex-1 pr-2 ${isActive ? 'text-black dark:text-white' : 'text-neutral-600 dark:text-neutral-400 group-hover:text-black dark:group-hover:text-white transition-colors'}`}>
-                                      {t.title}
-                                    </p>
-                                    {t.isPinned && <Pin size={10} className="text-accent shrink-0" />}
-                                </div>
-                                <p className="text-[9px] tech-mono text-neutral-400 truncate flex items-center gap-2">
-                                    <span>{getRelativeTime(t.updated)}</span>
-                                    <span className="w-1 h-1 rounded-full bg-neutral-600"></span>
-                                    <span>{t.messages.length} MSGS</span>
-                                </p>
-                              </>
-                            )}
-                          </div>
-
-                          {/* Actions (Hover Only) */}
-                          {!isEditing && (
-                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-1">
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); onTogglePin(t.id); }}
-                                    className={`p-1.5 rounded-lg transition-all ${t.isPinned ? 'text-accent hover:bg-accent/10' : 'text-neutral-400 hover:text-accent hover:bg-accent/10'}`}
-                                    title={t.isPinned ? "Unpin" : "Pin to Top"}
-                                >
-                                    {t.isPinned ? <PinOff size={14} /> : <Pin size={14} />}
-                                </button>
-                                <button 
-                                    onClick={(e) => handleStartRename(e, t)}
-                                    className="p-1.5 text-neutral-400 hover:text-accent hover:bg-accent/10 rounded-lg transition-all"
-                                    title="Rename"
-                                >
-                                    <Edit3 size={14} />
-                                </button>
-                                <button 
-                                    onClick={(e) => { 
-                                        e.stopPropagation(); 
-                                        if (debugService.logAction(UI_REGISTRY.CHAT_BTN_DELETE, FN_REGISTRY.CHAT_DELETE_SESSION, t.id)) {
-                                            // Explicit Confirmation
-                                            const confirmed = window.confirm(`⚠️ DELETE SESSION\n\nDelete "${t.title}" permanently? This cannot be undone.`);
-                                            if (confirmed) {
-                                                onDeleteThread(t.id); 
-                                            }
-                                        }
-                                    }} 
-                                    className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
-                                    title="Delete"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
-                            </div>
-                          )}
-                          
-                          {/* Active Chevron (if strictly active and not hovering actions) */}
-                          {isActive && !isEditing && (
-                              <ChevronRight size={16} className="text-accent group-hover:opacity-0 transition-opacity absolute right-4" />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-          
-          {filteredThreads.length === 0 && (
+        <div className="flex-1 flex flex-col min-h-0">
+          {flatData.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-neutral-400 opacity-50 space-y-4">
                   <MessageSquare size={48} strokeWidth={1} />
                   <p className="text-[10px] font-black uppercase tracking-widest">NO_LOGS_FOUND</p>
               </div>
+          ) : (
+             <GroupedVirtuoso
+                style={{ height: '100%', width: '100%' }}
+                groupCounts={groupCounts}
+                className="custom-scroll"
+                groupContent={(index) => {
+                    const label = groupNames[index];
+                    return (
+                        <div className="flex items-center gap-3 px-6 py-2 bg-white/95 dark:bg-[#09090b]/95 backdrop-blur-xl border-b border-black/5 dark:border-white/5 z-10 sticky top-0">
+                            <span className={`text-[8px] font-black tracking-[0.3em] uppercase ${label === 'PINNED' ? 'text-accent flex items-center gap-1' : 'text-neutral-500'}`}>
+                              {label === 'PINNED' && <Pin size={10} className="inline" />}
+                              {label}
+                            </span>
+                            <div className="h-[1px] flex-1 bg-black/10 dark:bg-white/10"></div>
+                        </div>
+                    );
+                }}
+                itemContent={(index) => {
+                    const t = flatData[index];
+                    const isActive = activeThreadId === t.id;
+                    const isEditing = editingId === t.id;
+                    const ModelIcon = t.persona === 'hanisah' ? Flame : Brain;
+
+                    return (
+                        <div className="px-4 py-1">
+                          <div 
+                            onClick={() => { if (!isEditing) { onSelectThread(t.id); if(window.innerWidth < 768) onClose(); } }}
+                            className={`
+                              group relative p-3.5 rounded-[16px] border transition-all duration-300 cursor-pointer overflow-hidden
+                              ${isActive 
+                                ? 'bg-white dark:bg-white/[0.08] border-accent/40 shadow-lg shadow-accent/5 ring-1 ring-accent/20' 
+                                : 'bg-transparent border-transparent hover:bg-zinc-100 dark:hover:bg-white/[0.03] hover:border-black/5 dark:hover:border-white/5'
+                              }
+                            `}
+                          >
+                            {/* Active Indicator Bar */}
+                            {isActive && (
+                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent shadow-[0_0_10px_var(--accent-color)]"></div>
+                            )}
+
+                            <div className="flex items-center gap-4 relative z-10">
+                              {/* Icon Container */}
+                              <div className={`
+                                w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all
+                                ${isActive 
+                                    ? 'bg-accent text-black shadow-md' 
+                                    : 'bg-zinc-200 dark:bg-white/5 text-neutral-400 group-hover:text-black dark:group-hover:text-white'
+                                }
+                              `}>
+                                 <ModelIcon size={18} />
+                              </div>
+
+                              {/* Text Content */}
+                              <div className="flex-1 min-w-0">
+                                {isEditing ? (
+                                  <form onSubmit={handleCommitRename} className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                                    <input 
+                                      autoFocus
+                                      value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)}
+                                      onBlur={handleCommitRename}
+                                      className="bg-transparent border-b border-accent w-full text-[11px] font-black uppercase outline-none py-1 text-black dark:text-white"
+                                    />
+                                  </form>
+                                ) : (
+                                  <>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <p className={`text-[11px] font-bold uppercase tracking-tight truncate leading-tight flex-1 pr-2 ${isActive ? 'text-black dark:text-white' : 'text-neutral-600 dark:text-neutral-400 group-hover:text-black dark:group-hover:text-white transition-colors'}`}>
+                                          {t.title}
+                                        </p>
+                                        {t.isPinned && <Pin size={10} className="text-accent shrink-0" />}
+                                    </div>
+                                    <p className="text-[9px] tech-mono text-neutral-400 truncate flex items-center gap-2">
+                                        <span>{getRelativeTime(t.updated)}</span>
+                                        <span className="w-1 h-1 rounded-full bg-neutral-600"></span>
+                                        <span>{t.messages.length} MSGS</span>
+                                    </p>
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Actions (Hover Only) */}
+                              {!isEditing && (
+                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-1">
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); onTogglePin(t.id); }}
+                                        className={`p-1.5 rounded-lg transition-all ${t.isPinned ? 'text-accent hover:bg-accent/10' : 'text-neutral-400 hover:text-accent hover:bg-accent/10'}`}
+                                        title={t.isPinned ? "Unpin" : "Pin to Top"}
+                                    >
+                                        {t.isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+                                    </button>
+                                    <button 
+                                        onClick={(e) => handleStartRename(e, t)}
+                                        className="p-1.5 text-neutral-400 hover:text-accent hover:bg-accent/10 rounded-lg transition-all"
+                                        title="Rename"
+                                    >
+                                        <Edit3 size={14} />
+                                    </button>
+                                    <button 
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            if (debugService.logAction(UI_REGISTRY.CHAT_BTN_DELETE, FN_REGISTRY.CHAT_DELETE_SESSION, t.id)) {
+                                                const confirmed = window.confirm(`⚠️ DELETE SESSION\n\nDelete "${t.title}" permanently? This cannot be undone.`);
+                                                if (confirmed) {
+                                                    onDeleteThread(t.id); 
+                                                }
+                                            }
+                                        }} 
+                                        className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+                                        title="Delete"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
+                              )}
+                              
+                              {/* Active Chevron (if strictly active and not hovering actions) */}
+                              {isActive && !isEditing && (
+                                  <ChevronRight size={16} className="text-accent group-hover:opacity-0 transition-opacity absolute right-4" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                    );
+                }}
+             />
           )}
         </div>
         

@@ -146,6 +146,7 @@ export class NeuralLinkService {
     private audioCheckInterval: any = null;
     private retryCount = 0;
     private maxRetries = 3;
+    private isWorkletLoaded: boolean = false;
     
     // Modules
     private ambientMixer: AmbientMixer | null = null;
@@ -199,6 +200,7 @@ export class NeuralLinkService {
         
         if (!this.inputCtx || this.inputCtx.state === 'closed') {
             this.inputCtx = new AudioContextClass({ sampleRate: 16000 });
+            this.isWorkletLoaded = false; // Reset loaded flag on new context
         }
         
         if (!this.outputCtx || this.outputCtx.state === 'closed') {
@@ -220,9 +222,28 @@ export class NeuralLinkService {
             throw new Error("AudioWorklet not supported in this browser.");
         }
         
-        const blob = new Blob([AUDIO_WORKLET_CODE], { type: 'application/javascript' });
-        const workletUrl = URL.createObjectURL(blob);
-        await this.inputCtx.audioWorklet.addModule(workletUrl);
+        // Prevent redundant loading which causes AbortError or NotSupportedError
+        if (!this.isWorkletLoaded) {
+            try {
+                const blob = new Blob([AUDIO_WORKLET_CODE], { type: 'application/javascript' });
+                const workletUrl = URL.createObjectURL(blob);
+                await this.inputCtx.audioWorklet.addModule(workletUrl);
+                this.isWorkletLoaded = true;
+            } catch (e: any) {
+                // If it fails, log warning but try to proceed to verification
+                // It might fail if already registered in some race conditions
+                console.warn("Worklet module load warning (possibly already registered):", e);
+            }
+        }
+
+        // Verify processor registration by attempting to create a node
+        try {
+            const dummy = new AudioWorkletNode(this.inputCtx, 'pcm-worklet');
+            dummy.disconnect();
+            this.isWorkletLoaded = true;
+        } catch (e: any) {
+            throw new Error("Audio processor failed to initialize: " + e.message);
+        }
 
         // 3. Initialize Mic
         if (!this.activeStream) {

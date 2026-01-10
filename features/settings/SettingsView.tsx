@@ -104,9 +104,9 @@ const PromptEditorModal: React.FC<{
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[3000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in will-change-opacity">
-            <div className="w-full max-w-2xl bg-skin-card border border-skin-border rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[80vh] transform-gpu will-change-transform animate-slide-up">
-                <div className="p-4 border-b border-skin-border flex justify-between items-center bg-skin-surface">
+        <div className="fixed inset-0 z-[3000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 pt-[calc(env(safe-area-inset-top)+2rem)] pb-[calc(env(safe-area-inset-bottom)+2rem)] animate-fade-in will-change-opacity">
+            <div className="w-full max-w-2xl bg-skin-card border border-skin-border rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-full transform-gpu will-change-transform animate-slide-up">
+                <div className="p-4 border-b border-skin-border flex justify-between items-center bg-skin-surface shrink-0">
                     <div className="flex items-center gap-2">
                         <Terminal size={16} className="text-accent"/>
                         <span className="text-[10px] font-black uppercase tracking-[0.2em]">SYSTEM_PROMPT_OVERRIDE</span>
@@ -119,7 +119,7 @@ const PromptEditorModal: React.FC<{
                     className="flex-1 bg-[#0a0a0b] text-white font-mono text-xs p-6 resize-none focus:outline-none"
                     spellCheck={false}
                 />
-                <div className="p-4 border-t border-skin-border bg-skin-surface flex justify-between items-center">
+                <div className="p-4 border-t border-skin-border bg-skin-surface flex justify-between items-center shrink-0">
                     <div className="text-[9px] font-mono text-skin-muted">{value.length} CHARS</div>
                     <div className="flex gap-2">
                         <button onClick={() => { onReset(); onClose(); }} className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 text-[9px] font-bold transition-all">RESET DEFAULT</button>
@@ -279,7 +279,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
     }, [setProviderVisibility]);
 
     return (
-        <div className="h-full flex flex-col px-4 pt-[calc(env(safe-area-inset-top)+1rem)] md:px-8 md:pt-12 lg:px-12 overflow-hidden font-sans animate-fade-in text-skin-text">
+        <div className="h-full flex flex-col px-4 pt-[calc(env(safe-area-inset-top)+1.5rem)] md:px-8 md:pt-12 lg:px-12 overflow-hidden font-sans animate-fade-in text-skin-text relative">
             
             <PromptEditorModal 
                 isOpen={isPromptModalOpen} 
@@ -291,7 +291,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
             />
 
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-skin-border pb-6 shrink-0 gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-skin-border pb-4 shrink-0 gap-4">
                 <div className="w-full">
                     <h1 className="text-3xl sm:text-4xl md:text-5xl font-black italic tracking-tighter uppercase break-words leading-[0.85]">
                         SYSTEM <span className="text-accent">CONFIG</span>
@@ -309,7 +309,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scroll pr-2 space-y-2 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
+            <div className="flex-1 overflow-y-auto custom-scroll pr-2 space-y-2 pb-[calc(env(safe-area-inset-bottom)+4rem)]">
                 
                 {/* 1. VISUAL & LANGUAGE */}
                 <SettingsSection title={t.theme_label || "VISUAL_INTERFACE"} icon={<Palette size={18} />}>
