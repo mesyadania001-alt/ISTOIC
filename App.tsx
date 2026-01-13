@@ -117,6 +117,10 @@ const AppContent: React.FC<AppContentProps> = ({ notes, setNotes }) => {
     root.style.setProperty('--accent-color', targetColor);
     root.style.setProperty('--accent-rgb', rgb);
     root.style.setProperty('--accent-foreground', onAccentColor);
+ codex/refactor-css-tokens-to-single-source-of-truth
+    root.style.setProperty('--accent-foreground-rgb', onAccentRgb);
+
+ main
     root.style.setProperty('--on-accent-color', onAccentColor);
     root.style.setProperty('--on-accent-rgb', onAccentRgb);
  codex/update-theme-colors-and-ui-settings

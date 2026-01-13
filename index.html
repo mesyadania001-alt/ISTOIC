@@ -118,14 +118,20 @@
                 main: 'var(--bg)',
                 card: 'var(--card)',
                 surface: 'var(--surface)',
+ codex/refactor-css-tokens-to-single-source-of-truth
+                'surface-hover': 'var(--bg-surface-hover)',
+                text: 'var(--text-primary)',
+                secondary: 'var(--text-secondary)',
+
                 'surface-hover': 'var(--surface-hover)',
                 text: 'var(--text-primary)',
+ main
                 muted: 'var(--text-muted)',
                 border: 'var(--border)',
                 highlight: 'var(--border-highlight)',
               },
               accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
-              'on-accent': 'rgb(var(--on-accent-rgb) / <alpha-value>)',
+              'on-accent': 'rgb(var(--accent-foreground-rgb) / <alpha-value>)',
             },
             fontFamily: {
               sans: ['Plus Jakarta Sans', 'sans-serif'],
