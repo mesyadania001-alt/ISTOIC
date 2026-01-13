@@ -1,6 +1,5 @@
-
 // IMPORT WAJIB: Penyeimbang WebRTC untuk semua browser (Safari/Android lama)
-import 'webrtc-adapter'; 
+import 'webrtc-adapter';
 
 // NOTE: Global Error Handlers for Web3 conflicts are now injected in index.html <head>
 // to ensure they run before any extension code.
@@ -11,22 +10,54 @@ import App from './App';
 import { VaultProvider } from './contexts/VaultContext';
 import { FeatureProvider } from './contexts/FeatureContext';
 
+// ✅ Capacitor URL handler (untuk balik dari Google Login ke app)
+import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
+
+// Firebase redirect result (ambil hasil login setelah balik)
+import { getAuth, getRedirectResult } from 'firebase/auth';
+const auth = getAuth();
+
 // Mencegah error jika root tidak ditemukan (Safety check)
 const rootElement = document.getElementById('root');
 if (!rootElement) {
-  throw new Error("FATAL: Could not find root element to mount to");
+  throw new Error('FATAL: Could not find root element to mount to');
 }
 
 const root = ReactDOM.createRoot(rootElement);
 
-// Register Service Worker for PWA Capabilities (Notifications & Offline)
-if ('serviceWorker' in navigator) {
+/**
+ * ✅ Tangkap redirect balik dari browser ke app (Capacitor)
+ * Ini penting untuk Firebase Google Login redirect.
+ */
+if (Capacitor.isNativePlatform()) {
+  CapApp.addListener('appUrlOpen', async ({ url }) => {
+    console.log('APP URL OPEN:', url);
+
+    try {
+      // Ini akan menyelesaikan proses redirect login jika ada
+      await getRedirectResult(auth);
+    } catch (e) {
+      console.error('Redirect error', e);
+    }
+
+    // Kembalikan ke root app (hindari nyangkut di handler page)
+    window.location.replace('/');
+  });
+}
+
+/**
+ * ✅ Service Worker untuk PWA
+ * ❗ Jangan aktifkan SW di Capacitor (native webview), biar tidak intercept request/login.
+ */
+if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(registration => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((registration) => {
         console.log('SW Registered:', registration.scope);
       })
-      .catch(error => {
+      .catch((error) => {
         console.log('SW Registration Failed:', error);
       });
   });
@@ -37,7 +68,7 @@ root.render(
   <React.StrictMode>
     <FeatureProvider>
       <VaultProvider>
-          <App />
+        <App />
       </VaultProvider>
     </FeatureProvider>
   </React.StrictMode>
