@@ -62,9 +62,11 @@ interface AppContentProps {
     setNotes: (notes: Note[]) => void;
     isDebugOpen: boolean;
     setIsDebugOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    userName?: string;
+    onLogout?: () => void;
 }
 
-const AppContent: React.FC<AppContentProps> = ({ notes, setNotes, isDebugOpen, setIsDebugOpen }) => {
+const AppContent: React.FC<AppContentProps> = ({ notes, setNotes, isDebugOpen, setIsDebugOpen, userName, onLogout }) => {
   const [activeFeature, setActiveFeature] = useState<FeatureID>('dashboard');
   const [isPending, startTransition] = useTransition(); 
 
@@ -172,7 +174,7 @@ const AppContent: React.FC<AppContentProps> = ({ notes, setNotes, isDebugOpen, s
             <div className={`h-full w-full transition-opacity duration-300 ${isPending ? 'opacity-70 scale-[0.99] origin-center' : 'opacity-100 scale-100'}`}>
                 {(() => {
                     switch (activeFeature) {
-                        case 'dashboard': return <ErrorBoundary viewName="DASHBOARD"><DashboardView key={language} onNavigate={handleNavigate} notes={notes} /></ErrorBoundary>;
+                        case 'dashboard': return <ErrorBoundary viewName="DASHBOARD"><DashboardView key={language} onNavigate={handleNavigate} notes={notes} userName={userName || 'Account'} onLogout={onLogout} /></ErrorBoundary>;
                         case 'notes': return <ErrorBoundary viewName="ARCHIVE_VAULT"><SmartNotesView key={language} notes={notes} setNotes={setNotes} /></ErrorBoundary>;
                         case 'chat': return <ErrorBoundary viewName="NEURAL_LINK"><AIChatView key={language} chatLogic={chatLogic} /></ErrorBoundary>;
                         case 'tools': return <ErrorBoundary viewName="NEURAL_ARSENAL"><AIToolsView key={language} /></ErrorBoundary>;
@@ -242,7 +244,7 @@ const App: React.FC = () => {
     const [isDebugOpen, setIsDebugOpen] = useState(false);
     const [notes, setNotes] = useIDB<Note[]>('notes', []);
     const [sessionMode, setSessionMode] = useState<SessionMode>('AUTH');
-    const [identity] = useLocalStorage<IStokUserIdentity | null>('istok_user_identity', null);
+    const [identity, setIdentity] = useLocalStorage<IStokUserIdentity | null>('istok_user_identity', null);
     const returnToRef = useRef<SessionMode | null>(null);
     
     useIndexedDBSync(notes);
@@ -321,6 +323,16 @@ const App: React.FC = () => {
         setSessionMode(mode);
     }, []);
 
+    const handleLogout = useCallback(() => {
+        try {
+            setIdentity(null);
+            localStorage.removeItem('active_thread_id');
+        } catch (e) {
+            console.warn('Logout cleanup failed', e);
+        }
+        setSessionMode('AUTH');
+    }, [setIdentity]);
+
     // ANDROID BACK BUTTON HANDLER (Capacitor)
     useEffect(() => {
         if (!Capacitor.isNativePlatform()) return;
@@ -392,6 +404,8 @@ const App: React.FC = () => {
                         setNotes={setNotes} 
                         isDebugOpen={isDebugOpen} 
                         setIsDebugOpen={setIsDebugOpen} 
+                        userName={identity?.displayName || identity?.codename || 'Account'}
+                        onLogout={handleLogout}
                     />
                 </LiveSessionProvider>
             </GenerativeSessionProvider>

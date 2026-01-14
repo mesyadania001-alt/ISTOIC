@@ -13,6 +13,8 @@ import { DailyStoicWidget } from './components/DailyStoicWidget';
 interface DashboardProps {
     onNavigate: (feature: FeatureID) => void;
     notes: Note[]; 
+    userName?: string;
+    onLogout?: () => void;
 }
 
 const StatBox: React.FC<{ label: string; value: string; isPulse?: boolean; color?: string; icon?: React.ReactNode; onClick?: () => void }> = ({ label, value, isPulse, color, icon, onClick }) => (
@@ -93,7 +95,7 @@ const BentoCard: React.FC<{
     );
 };
 
-const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
+const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes, userName = 'Account', onLogout }) => {
     const { isVaultUnlocked, unlockVault, lockVault, isVaultConfigEnabled } = useVault();
     const [personaMode] = useLocalStorage<'hanisah' | 'stoic'>('ai_persona_mode', 'hanisah');
     const [language] = useLocalStorage<string>('app_language', 'id');
@@ -181,6 +183,8 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
         return isNaN(date.getTime()) ? 'UNKNOWN' : date.toLocaleDateString();
     };
 
+    const [isAccountOpen, setIsAccountOpen] = useState(false);
+
     return (
         <div className="h-full w-full overflow-y-auto custom-scroll flex flex-col px-4 pb-32 pt-[calc(env(safe-area-inset-top)+1.5rem)] md:px-8 md:pt-12 md:pb-40 lg:px-12 animate-fade-in bg-noise relative z-10">
             <VaultPinModal 
@@ -191,26 +195,42 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
 
             <div className="max-w-[1400px] mx-auto w-full space-y-10 md:space-y-12">
                 
-                <header className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-10 animate-slide-up pb-2">
-                    <div className="space-y-6 md:space-y-8 flex-1 w-full">
-                        <div className="flex items-center gap-4" aria-live="polite">
-                            <div className="px-4 py-2 rounded-xl bg-skin-card border border-skin-border backdrop-blur-md tech-mono text-[9px] font-black uppercase text-accent tracking-[0.3em] shadow-[0_0_20px_rgba(var(--accent-rgb),0.2)] flex items-center gap-2">
-                                <Fingerprint size={12} /> PERSONAL_OS_v101.0
+                <header className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-8 animate-slide-up pb-4">
+                    <div className="space-y-4 md:space-y-6 flex-1 w-full">
+                        <div className="flex items-center justify-between w-full gap-4" aria-live="polite">
+                            <div className="flex items-center gap-3">
+                                <button 
+                                    onClick={handleNavSystem}
+                                    className="px-3 py-1.5 rounded-full bg-surface text-accent border border-border flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_rgba(0,0,0,0.08)] hover:border-accent/60 transition-all"
+                                    aria-label="System status"
+                                >
+                                    <span className="w-2 h-2 rounded-full bg-success animate-pulse shadow-[0_0_10px_var(--accent)]"></span>
+                                    {t.uptime}
+                                </button>
                             </div>
-                            <div className="h-[1px] w-12 bg-gradient-to-r from-accent/50 to-transparent"></div>
-                            <button 
-                                onClick={handleNavSystem}
-                                className="text-skin-muted tech-mono text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:text-accent transition-colors"
-                                title="Open System Mechanic"
-                                aria-label="System Uptime Status"
-                            >
-                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]"></span>
-                                {t.uptime}
-                            </button>
+                            <div className="relative">
+                                <button
+                                    onClick={() => setIsAccountOpen((v) => !v)}
+                                    className="flex items-center gap-3 rounded-full bg-surface-2 border border-border px-3 py-1.5 text-sm font-semibold text-text hover:border-accent transition-all min-w-[160px] justify-between"
+                                    aria-haspopup="menu"
+                                    aria-expanded={isAccountOpen}
+                                >
+                                    <span className="truncate">{userName || 'Account'}</span>
+                                    <ChevronRight size={16} className={`transition-transform ${isAccountOpen ? 'rotate-90' : ''}`} />
+                                </button>
+                                {isAccountOpen && (
+                                    <div className="absolute right-0 mt-2 w-48 rounded-2xl bg-surface border border-border shadow-[0_20px_60px_rgba(0,0,0,0.25)] z-[1200] overflow-hidden">
+                                        <button onClick={() => { setIsAccountOpen(false); onNavigate('settings'); }} className="w-full text-left px-4 py-3 text-sm text-text hover:bg-surface-2 transition-colors">Settings</button>
+                                        <button onClick={() => { setIsAccountOpen(false); onNavigate('dashboard'); }} className="w-full text-left px-4 py-3 text-sm text-text hover:bg-surface-2 transition-colors">Profile</button>
+                                        {onLogout && <button onClick={() => { setIsAccountOpen(false); onLogout(); }} className="w-full text-left px-4 py-3 text-sm text-danger font-semibold hover:bg-surface-2 transition-colors">Logout</button>}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <h1 className="text-[13vw] md:text-[7rem] xl:text-[8rem] font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-skin-text via-skin-text to-skin-muted leading-[0.85] uppercase drop-shadow-2xl break-words">
-                             DASHBOARD <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-purple-500 animate-gradient-text">UTAMA</span>
-                        </h1>
+                        <div className="space-y-2">
+                            <p className="overline text-text-muted">Welcome back</p>
+                            <h1 className="heading-1 text-text">Dashboard</h1>
+                        </div>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-5 w-full xl:w-auto min-w-[280px] md:min-w-[360px] lg:h-40">
@@ -224,7 +244,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes }) => {
                             label={t.focus} 
                             value={`${syncLevel}%`} 
                             isPulse={true} 
-                            color={syncLevel > 90 ? 'text-accent' : 'text-yellow-500'}
+                            color={syncLevel > 90 ? 'text-accent' : 'text-skin-muted'}
                             icon={<Activity />}
                             onClick={handleNavSystem} 
                         />

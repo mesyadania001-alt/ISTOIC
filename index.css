@@ -9,21 +9,41 @@
 
 :root {
   color-scheme: light dark;
-  
-  /* --- TOKEN SYSTEM: LIGHT MODE --- */
-  --bg-main: #f6f7fb;       
-  --bg-card: #ffffff;       
-  --bg-surface: #eef1f7;    
-  --bg-surface-hover: #e1e7f0;
-  
-  --text-main: #0b0e14;     
-  --text-muted: #5f6b7a;    
-  
-  --border-base: rgba(15, 23, 42, 0.06);
-  --border-highlight: rgba(15, 23, 42, 0.12);
-  
-  --shadow-color: 15 23 42;
-  
+
+  /* --- SEMANTIC TOKENS (LIGHT MODE) --- */
+  --bg: #fffbeb;
+  --bg-elevated: #fffbfc;
+  --surface: #fffbfc;
+  --surface-2: #fcebe5;
+  --border: #d9d9d9;
+  --text: #28283d;
+  --text-muted: #b7b7b9;
+  --text-invert: #fbfbfb;
+  --accent: #f56f10;
+  --accent-2: #f9d84b;
+  --danger: #ff001e;
+  --warning: #f9d84b;
+  --success: #00ff8b;
+  --info: #6765ec;
+  --focus: #f56f10;
+  --shadow: 0 16px 50px rgba(12, 29, 50, 0.08);
+
+  /* legacy skin aliases for tailwind mapping */
+  --bg-main: var(--bg);
+  --bg-card: var(--surface);
+  --bg-surface: var(--surface-2);
+  --bg-surface-hover: var(--surface);
+  --text-main: var(--text);
+  --text-muted: var(--text-muted);
+  --border-base: rgba(0,0,0,0.08);
+  --border-highlight: var(--border);
+  --accent-color: var(--accent);
+  --accent-rgb: 245 111 16;
+  --on-accent-color: var(--text-invert);
+  --on-accent-rgb: 251 251 251;
+  --accent-glow: rgba(245,111,16,0.35);
+  --nav-accent: var(--accent);
+
   /* iOS Safe Area Defaults */
   --sat: env(safe-area-inset-top);
   --sab: env(safe-area-inset-bottom);
@@ -38,35 +58,58 @@
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --shadow-soft: 0 10px 40px rgba(15, 23, 42, 0.08);
-  --shadow-strong: 0 20px 60px rgba(15, 23, 42, 0.18);
+  --space-5: 24px;
+  --space-6: 32px;
+  --shadow-soft: 0 10px 40px rgba(12, 29, 50, 0.08);
+  --shadow-strong: 0 24px 70px rgba(12, 29, 50, 0.18);
   --motion-fast: 120ms;
   --motion-normal: 240ms;
   --motion-slow: 420ms;
   --z-nav: 1000;
-  --z-overlay: 1100;
+  --z-overlay: 1200;
   --z-toast: 1300;
 }
 
 .dark {
-  /* --- TOKEN SYSTEM: DARK MODE --- */
-  --bg-main: #05070d;       
-  --bg-card: #0c111b;       
-  --bg-surface: #121826;    
-  --bg-surface-hover: #1a2132;
-  
-  --text-main: #f8fafc;     
-  --text-muted: #94a3b8;    
-  
-  --border-base: rgba(148, 163, 184, 0.12);
-  --border-highlight: rgba(148, 163, 184, 0.22);
+  /* --- SEMANTIC TOKENS (DARK MODE) --- */
+  --bg: #151419;
+  --bg-elevated: #1b1a1f;
+  --surface: #1b1a1f;
+  --surface-2: #262626;
+  --border: #262626;
+  --text: #fbfbfb;
+  --text-muted: #878787;
+  --text-invert: #151419;
+  --accent: #f56f10;
+  --accent-2: #f9d84b;
+  --danger: #ff001e;
+  --warning: #f9d84b;
+  --success: #00ff8b;
+  --info: #6765ec;
+  --focus: #f56f10;
+  --shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
+
+  --bg-main: var(--bg);
+  --bg-card: var(--surface);
+  --bg-surface: var(--surface-2);
+  --bg-surface-hover: #1f1f24;
+  --text-main: var(--text);
+  --text-muted: var(--text-muted);
+  --border-base: rgba(38, 38, 38, 1);
+  --border-highlight: rgba(38, 38, 38, 1);
+  --accent-color: var(--accent);
+  --accent-rgb: 245 111 16;
+  --on-accent-color: var(--text-invert);
+  --on-accent-rgb: 21 20 25;
+  --accent-glow: rgba(245,111,16,0.4);
+  --nav-accent: var(--accent);
 }
 
 html {
     height: 100%;
-    /* GHOST SCROLL FIX: Prevent overscroll bounce globally */
+    font-size: 16px;
     overscroll-behavior-y: none;
-    background-color: var(--bg-main);
+    background-color: var(--bg);
     touch-action: manipulation;
 }
 
@@ -75,14 +118,12 @@ body {
   padding: 0;
   height: 100dvh; 
   width: 100vw;
-  overflow: hidden; /* Prevents double scrollbars */
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
-  /* Prevent pull-to-refresh on mobile PWA */
   overscroll-behavior-y: none; 
-  
-  background-color: var(--bg-main);
-  color: var(--text-main);
+  background-color: var(--bg);
+  color: var(--text);
   transition: background-color 0.4s ease, color 0.4s ease;
 }
 
@@ -113,6 +154,16 @@ body.low-perf * {
     animation: none !important;
     transition: none !important;
 }
+
+/* --- TYPOGRAPHY SCALE --- */
+h1, .heading-1 { font-size: 2.75rem; line-height: 1.1; font-weight: 800; letter-spacing: -0.02em; }
+h2, .heading-2 { font-size: 2rem; line-height: 1.15; font-weight: 800; letter-spacing: -0.015em; }
+h3, .heading-3 { font-size: 1.5rem; line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; }
+.body-lg { font-size: 1.0625rem; line-height: 1.55; font-weight: 500; }
+.body { font-size: 1rem; line-height: 1.55; font-weight: 500; }
+.body-sm { font-size: 0.9375rem; line-height: 1.5; font-weight: 500; }
+.caption { font-size: 0.8125rem; line-height: 1.4; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; }
+.overline { font-size: 0.75rem; line-height: 1.3; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 
 /* --- SAFE AREA UTILITIES (iOS XR+) --- */
 .pt-safe { padding-top: max(1rem, var(--sat)); }
