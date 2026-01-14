@@ -60,9 +60,11 @@ const ViewLoader = () => (
 interface AppContentProps {
     notes: Note[];
     setNotes: (notes: Note[]) => void;
+    isDebugOpen: boolean;
+    setIsDebugOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-const AppContent: React.FC<AppContentProps> = ({ notes, setNotes }) => {
+const AppContent: React.FC<AppContentProps> = ({ notes, setNotes, isDebugOpen, setIsDebugOpen }) => {
   const [activeFeature, setActiveFeature] = useState<FeatureID>('dashboard');
   const [isPending, startTransition] = useTransition(); 
 
@@ -70,7 +72,6 @@ const AppContent: React.FC<AppContentProps> = ({ notes, setNotes }) => {
   const [theme] = useLocalStorage<string>('app_theme', 'cyan');
   const [colorScheme] = useLocalStorage<'system' | 'light' | 'dark'>('app_color_scheme', 'system');
   const [language] = useLocalStorage<string>('app_language', 'id');
-  const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [registryValid, setRegistryValid] = useState<boolean>(false);
 
   const chatLogic = useChatLogic(notes, setNotes);
@@ -238,6 +239,7 @@ const AppContent: React.FC<AppContentProps> = ({ notes, setNotes }) => {
 type SessionMode = 'AUTH' | 'SELECT' | 'ISTOIC' | 'ISTOK' | 'TELEPONAN';
 
 const App: React.FC = () => {
+    const [isDebugOpen, setIsDebugOpen] = useState(false);
     const [notes, setNotes] = useIDB<Note[]>('notes', []);
     const [sessionMode, setSessionMode] = useState<SessionMode>('AUTH');
     const [identity] = useLocalStorage<IStokUserIdentity | null>('istok_user_identity', null);
@@ -385,7 +387,12 @@ const App: React.FC = () => {
                             isProcessing={!incomingConnection.firstData} 
                         />
                     )}
-                    <AppContent notes={notes} setNotes={setNotes} />
+                    <AppContent 
+                        notes={notes} 
+                        setNotes={setNotes} 
+                        isDebugOpen={isDebugOpen} 
+                        setIsDebugOpen={setIsDebugOpen} 
+                    />
                 </LiveSessionProvider>
             </GenerativeSessionProvider>
         );
