@@ -25,10 +25,14 @@ const PersonaToggle: React.FC<{ mode: 'hanisah' | 'stoic'; onToggle: () => void;
     return (
         <button 
             onClick={onToggle}
-            className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300 ${mode === 'hanisah' ? 'bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-500' : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-600 dark:text-cyan-500'}`}
+            className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300 ${
+              mode === 'hanisah'
+                ? 'bg-[var(--accent)]/10 border-[color:var(--accent)]/30 text-[var(--accent)]'
+                : 'bg-[var(--surface-2)] border-[color:var(--border)] text-[var(--text)]'
+            }`}
         >
-            <div className={`w-1.5 h-1.5 rounded-full ${mode === 'hanisah' ? 'bg-orange-500' : 'bg-cyan-500'} animate-pulse`}></div>
-            <span className="text-[10px] font-black uppercase tracking-widest">{mode === 'hanisah' ? 'HANISAH' : 'STOIC'}</span>
+            <div className={`w-1.5 h-1.5 rounded-full ${mode === 'hanisah' ? 'bg-[var(--accent)]' : 'bg-[var(--text-muted)]'} animate-pulse`}></div>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em]">{mode === 'hanisah' ? 'Hanisah' : 'Stoic'}</span>
             <div className="w-[1px] h-3 bg-current opacity-20 mx-1"></div>
             {mode === 'hanisah' ? <Flame size={12} strokeWidth={2.5} /> : <Brain size={12} strokeWidth={2.5} />}
         </button>
@@ -135,15 +139,15 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
             <div className="flex-1 min-h-0 relative w-full max-w-[900px] mx-auto pt-2">
                 {showEmptyState ? (
                     <div className="flex flex-col h-full justify-center items-center w-full pb-20 animate-fade-in overflow-y-auto custom-scroll px-4">
-                        <div className="text-center mb-10 space-y-4">
+                            <div className="text-center mb-10 space-y-4">
                             <div className="inline-flex items-center justify-center w-16 h-16 rounded-[24px] mb-2 bg-[var(--surface-2)] text-[var(--accent)]">
                                 {personaMode === 'hanisah' ? <Flame size={32} /> : <Brain size={32} />}
                             </div>
                             <div>
-                                <h2 className="text-4xl md:text-6xl font-black italic tracking-tighter text-[var(--text)] uppercase leading-none">{personaMode}</h2>
-                                <p className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-[0.3em]">{personaMode === 'hanisah' ? 'Hyper-intuitive partner' : 'Logic kernel'}</p>
+                                <h2 className="page-title text-[var(--text)]">{personaMode === 'hanisah' ? 'Hanisah' : 'Stoic'}</h2>
+                                <p className="body-sm text-[var(--text-muted)]">{personaMode === 'hanisah' ? 'Percakapan natural dan empatik' : 'Analisis runtut dan fokus'}</p>
                             </div>
-                        </div>
+                            </div>
                         
                         {/* INPUT IN EMPTY STATE */}
                          <div className="w-full max-w-2xl mx-auto animate-slide-up relative z-20" style={{ animationDelay: '100ms' }}>
@@ -151,8 +155,8 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl mx-auto mt-8 opacity-80">
-                            {!isStoic ? <SuggestionCard icon={<SparklesIcon />} label="GENERATE VISUAL" desc="Create high-fidelity images." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'GEN_IMG'); setInput("Generate a futuristic cyberpunk city with neon lights."); }} accent="text-pink-500 group-hover:text-pink-600" delay={150} /> : <SuggestionCard icon={<Brain />} label="FIRST PRINCIPLES" desc="Deconstruct complex problems." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'LOGIC'); setInput("Analyze this problem using First Principles thinking: [Insert Problem]"); }} accent="text-cyan-500 group-hover:text-cyan-600" delay={150} />}
-                            <SuggestionCard icon={<Code />} label="CODE AUDIT" desc="Debug & optimize algorithms." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'CODE_AUDIT'); setInput("Analyze this algorithm for complexity: [Paste Code]"); }} accent="text-emerald-500 group-hover:text-emerald-600" delay={200} />
+                            {!isStoic ? <SuggestionCard icon={<SparklesIcon />} label="Generate visual" desc="Create high-fidelity images." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'GEN_IMG'); setInput("Generate a cinematic landscape with warm lighting."); }} accent="text-[var(--accent)] group-hover:text-[var(--accent)]" delay={150} /> : <SuggestionCard icon={<Brain />} label="First principles" desc="Deconstruct complex problems." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'LOGIC'); setInput("Analyze this problem using first principles: [Insert Problem]"); }} accent="text-[var(--accent-2)] group-hover:text-[var(--accent-2)]" delay={150} />}
+                            <SuggestionCard icon={<Code />} label="Code audit" desc="Debug & optimize algorithms." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'CODE_AUDIT'); setInput("Analyze this algorithm for complexity: [Paste Code]"); }} accent="text-[var(--success)] group-hover:text-[var(--success)]" delay={200} />
                         </div>
                     </div>
                 ) : (

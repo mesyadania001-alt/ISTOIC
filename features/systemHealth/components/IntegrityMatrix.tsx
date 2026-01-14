@@ -65,14 +65,14 @@ const FeatureToggleCard: React.FC<{
         className={`
             w-full flex items-center justify-between p-4 rounded-xl border transition-all group text-left relative overflow-hidden
             ${isEnabled 
-                ? 'bg-blue-600/10 border-blue-500/30' 
+                ? 'bg-[var(--accent)]/10 border-[color:var(--accent)]/30' 
                 : 'bg-zinc-900/50 border-white/5 opacity-60 hover:opacity-100'}
         `}
     >
-        {isEnabled && <div className="absolute inset-0 bg-blue-500/5 animate-pulse pointer-events-none"></div>}
+        {isEnabled && <div className="absolute inset-0 bg-[var(--accent)]/5 animate-pulse pointer-events-none"></div>}
 
         <div className="flex items-center gap-4 relative z-10">
-            <div className={`p-2.5 rounded-lg transition-colors ${isEnabled ? 'bg-blue-500 text-white shadow-[0_0_15px_var(--accent-glow)]' : 'bg-white/5 text-neutral-500'}`}>
+            <div className={`p-2.5 rounded-lg transition-colors ${isEnabled ? 'bg-[var(--accent)] text-[var(--text-invert)] shadow-[0_0_15px_var(--accent-glow)]' : 'bg-white/5 text-neutral-500'}`}>
                 {icon}
             </div>
             <div>
@@ -82,7 +82,7 @@ const FeatureToggleCard: React.FC<{
                 <p className="text-[9px] text-neutral-500 font-mono mt-0.5">{desc}</p>
             </div>
         </div>
-        <div className={`transition-colors relative z-10 ${isEnabled ? 'text-blue-400' : 'text-neutral-600'}`}>
+        <div className={`transition-colors relative z-10 ${isEnabled ? 'text-[var(--accent)]' : 'text-neutral-600'}`}>
             {isEnabled ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
         </div>
     </button>
@@ -110,14 +110,14 @@ export const IntegrityMatrix: React.FC = () => {
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none"></div>
             <div className="absolute top-0 right-0 w-full h-full bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
 
-            {/* SECTION 1: KERNEL PROTOCOLS */}
+            {/* SECTION 1: SYSTEM CONTROLS */}
             <div className="mb-8 relative z-10">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                        <Shield size={18} className="text-blue-500" />
-                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">KERNEL_PROTOCOLS</h3>
+                        <Shield size={18} className="text-[var(--accent)]" />
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">System Controls</h3>
                     </div>
-                    <span className="text-[9px] font-bold bg-blue-500/10 text-blue-500 px-2 py-1 rounded border border-blue-500/20">RESOURCE CONTROL</span>
+                    <span className="text-[9px] font-bold bg-[var(--accent)]/10 text-[var(--accent)] px-2 py-1 rounded border border-[color:var(--accent)]/30">Status: Active</span>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

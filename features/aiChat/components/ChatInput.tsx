@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, memo, useCallback, useMemo } from 'react';
+﻿import React, { useRef, useEffect, useState, memo, useCallback, useMemo } from 'react';
 import {
   Plus,
   Mic,
@@ -39,9 +39,9 @@ interface ChatInputProps {
 const MAX_CHARS = 4000;
 
 const EMOJI_CATEGORIES = {
-  EXPRESSIONS: ['😀', '🙂', '🤔', '😎', '🥳', '🤖', '🧠', '😴', '😌', '🙃'],
-  SIGNALS: ['✅', '⚡️', '🚀', '❤️', '🔥', '⭐️', '🎯', '🛠️', '📌', '🔍'],
-  NATURE: ['🌿', '🌧️', '🌅', '🌙', '🌊', '🌋', '🌟', '🌈', '🌤️', '🌵']
+  EXPRESSIONS: ['😀', '😊', '😉', '😂', '😍', '🤔', '😴', '😎', '😭', '🙌'],
+  SIGNALS: ['👍', '👎', '🙏', '🔥', '🎯', '⚡', '✅', '❓', '🚀', '💡'],
+  NATURE: ['🌿', '🌱', '🌤️', '🌙', '⭐', '🌊', '🔥', '🍃', '🌻', '🌵']
 };
 
 export const ChatInput: React.FC<ChatInputProps> = memo(
@@ -518,3 +518,4 @@ export const ChatInput: React.FC<ChatInputProps> = memo(
     );
   }
 );
+

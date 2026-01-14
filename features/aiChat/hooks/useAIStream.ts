@@ -141,7 +141,6 @@ export const useAIStream = ({
       setIsLoading(true);
 
       let accumulatedText = '';
-      let lastChunk = '';
       let errorType: StreamErrorType | undefined;
 
       try {
@@ -159,9 +158,10 @@ export const useAIStream = ({
             throw new DOMException('ABORTED_BY_USER', 'AbortError');
           }
 
-          if (chunk.text && chunk.text !== lastChunk) {
-            accumulatedText += chunk.text;
-            lastChunk = chunk.text;
+          if (chunk.text) {
+            const nextText = String(chunk.text);
+            const appendText = nextText.startsWith(accumulatedText) ? nextText.slice(accumulatedText.length) : nextText;
+            accumulatedText += appendText;
           }
 
           if (chunk.functionCall) {

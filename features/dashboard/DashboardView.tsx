@@ -34,10 +34,10 @@ const StatBox: React.FC<{ label: string; value: string; isPulse?: boolean; color
         </div>
         
         <div className="relative z-10">
-            <p className={`text-4xl lg:text-5xl font-black tracking-tighter italic leading-none group-hover:translate-x-1 transition-transform duration-500 ${color || 'text-skin-text'}`}>{value}</p>
-            <div className="flex items-center gap-2 mt-3">
+            <p className={`text-3xl lg:text-4xl font-bold tracking-tight leading-tight group-hover:translate-x-1 transition-transform duration-500 ${color || 'text-skin-text'}`}>{value}</p>
+            <div className="flex items-center gap-2 mt-2">
                 <div className="h-[1px] w-4 bg-skin-border group-hover:w-8 group-hover:bg-accent/50 transition-all duration-500"></div>
-                <p className="tech-mono text-[9px] text-skin-muted font-bold uppercase tracking-[0.2em]">{label}</p>
+                <p className="caption text-skin-muted">{label}</p>
             </div>
         </div>
     </button>
@@ -163,17 +163,17 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes, userName =
     };
 
     const t = {
-        uptime: language === 'en' ? "SYSTEM ONLINE" : "SISTEM ONLINE",
-        nodes: language === 'en' ? "TOTAL NOTES" : "TOTAL CATATAN",
-        focus: language === 'en' ? "SYNC STATUS" : "STATUS SINKRON",
-        archiveTitle: language === 'en' ? "ARCHIVE" : "ARSIP",
+        uptime: language === 'en' ? "Online" : "Terhubung",
+        nodes: language === 'en' ? "Notes" : "Catatan",
+        focus: language === 'en' ? "Sync" : "Sinkron",
+        archiveTitle: language === 'en' ? "Archive" : "Arsip",
         archiveDesc: language === 'en' ? "Long-term storage." : "Penyimpanan data.",
-        chatTitle: "AI ASSISTANT",
+        chatTitle: "AI Assistant",
         chatDesc: language === 'en' ? "Virtual partner." : "Partner virtual.",
-        toolsTitle: "AI TOOLS",
+        toolsTitle: "AI Tools",
         toolsDesc: language === 'en' ? "Generative tools." : "Alat generatif.",
-        recent: language === 'en' ? "RECENT ACTIVITY" : "AKTIVITAS TERBARU",
-        control: language === 'en' ? "SECURITY" : "KEAMANAN",
+        recent: language === 'en' ? "Recent activity" : "Aktivitas terbaru",
+        control: language === 'en' ? "Security" : "Keamanan",
     };
 
     const recentNotes = Array.isArray(notes) ? notes.slice(0, 3) : [];
@@ -201,7 +201,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes, userName =
                             <div className="flex items-center gap-3">
                                 <button 
                                     onClick={handleNavSystem}
-                                    className="px-3 py-1.5 rounded-full bg-surface text-accent border border-border flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_10px_30px_rgba(0,0,0,0.08)] hover:border-accent/60 transition-all"
+                                    className="px-3 py-1.5 rounded-full bg-surface text-accent border border-border flex items-center gap-2 text-[11px] font-semibold tracking-[0.08em] shadow-[0_10px_30px_rgba(0,0,0,0.08)] hover:border-accent/60 transition-all"
                                     aria-label="System status"
                                 >
                                     <span className="w-2 h-2 rounded-full bg-success animate-pulse shadow-[0_0_10px_var(--accent)]"></span>
@@ -229,7 +229,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes, userName =
                         </div>
                         <div className="space-y-2">
                             <p className="overline text-text-muted">Welcome back</p>
-                            <h1 className="heading-1 text-text">Dashboard</h1>
+                            <h1 className="page-title text-text">Dashboard</h1>
                         </div>
                     </div>
                     

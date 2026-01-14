@@ -58,8 +58,8 @@ export const LiveMiniPlayer: React.FC = () => {
                 
                 {/* Active Tool Indicator (HUD) */}
                 {activeTool && (
-                    <div className="absolute top-0 left-0 right-0 bg-blue-600/90 text-white text-[9px] font-black uppercase tracking-widest px-3 py-1 flex items-center gap-2 z-20 animate-pulse">
-                        <Sparkles size={10} /> EXECUTING: {activeTool.replace(/_/g, ' ')}...
+                    <div className="absolute top-0 left-0 right-0 bg-[var(--accent)]/90 text-[var(--text-invert)] text-[10px] font-semibold tracking-wide px-3 py-1 flex items-center gap-2 z-20 animate-pulse">
+                        <Sparkles size={10} /> Executing {activeTool.replace(/_/g, ' ')}
                     </div>
                 )}
 

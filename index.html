@@ -90,12 +90,12 @@
     <!-- PWA Settings -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="IStoicAI" />
+    <meta name="apple-mobile-web-app-title" content="ISTOIC AI" />
     
     <!-- iOS Icons -->
     <link rel="apple-touch-icon" href="https://grainy-gradients.vercel.app/noise.svg" />
 
-    <title>IStoicAI v101.0 | Platinum OS</title>
+    <title>ISTOIC AI | Intelligent Workspace</title>
     
     <!-- Tailwind via CDN for rapid dev -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -113,18 +113,31 @@
         theme: {
           extend: {
             colors: {
-              // SEMANTIC TOKEN MAPPING
-              skin: {
-                main: 'var(--bg-main)',
-                card: 'var(--bg-card)',
-                surface: 'var(--bg-surface)',
-                'surface-hover': 'var(--bg-surface-hover)',
-                text: 'var(--text-main)',
-                muted: 'var(--text-muted)',
-                border: 'var(--border-base)',
-                highlight: 'var(--border-highlight)',
-              },
+              bg: 'rgb(var(--bg-rgb) / <alpha-value>)',
+              'bg-elevated': 'rgb(var(--bg-elevated-rgb) / <alpha-value>)',
+              surface: 'rgb(var(--surface-rgb) / <alpha-value>)',
+              'surface-2': 'rgb(var(--surface-2-rgb) / <alpha-value>)',
+              border: 'rgb(var(--border-rgb) / <alpha-value>)',
+              text: 'rgb(var(--text-rgb) / <alpha-value>)',
+              'text-muted': 'rgb(var(--text-muted-rgb) / <alpha-value>)',
+              'text-invert': 'rgb(var(--text-invert-rgb) / <alpha-value>)',
               accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
+              'accent-2': 'rgb(var(--accent-2-rgb) / <alpha-value>)',
+              success: 'rgb(var(--success-rgb) / <alpha-value>)',
+              danger: 'rgb(var(--danger-rgb) / <alpha-value>)',
+              warning: 'rgb(var(--warning-rgb) / <alpha-value>)',
+              info: 'rgb(var(--info-rgb) / <alpha-value>)',
+              // legacy aliases
+              skin: {
+                main: 'rgb(var(--bg-rgb) / <alpha-value>)',
+                card: 'rgb(var(--surface-rgb) / <alpha-value>)',
+                surface: 'rgb(var(--surface-rgb) / <alpha-value>)',
+                'surface-hover': 'rgb(var(--surface-2-rgb) / <alpha-value>)',
+                text: 'rgb(var(--text-rgb) / <alpha-value>)',
+                muted: 'rgb(var(--text-muted-rgb) / <alpha-value>)',
+                border: 'rgb(var(--border-rgb) / <alpha-value>)',
+                highlight: 'rgb(var(--accent-rgb) / <alpha-value>)',
+              },
               'on-accent': 'rgb(var(--on-accent-rgb) / <alpha-value>)',
             },
             fontFamily: {

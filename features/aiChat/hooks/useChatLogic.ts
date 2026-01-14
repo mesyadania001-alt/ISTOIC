@@ -24,8 +24,8 @@ type SendOptions = {
   persona?: 'hanisah' | 'stoic';
 };
 
-const HANISAH_WELCOME = '**HANISAH V20 ONLINE.**\n\nHai, sistem sudah siap. Apa yang ingin kamu bahas?';
-const STOIC_WELCOME = '**STOIC V20 TITANIUM.**\n\nLogic core initialized. Mari kita mulai.';
+const HANISAH_WELCOME = '**Hanisah siap membantu.**\n\nApa yang ingin kamu bahas hari ini?';
+const STOIC_WELCOME = '**Stoic siap fokus.**\n\nBerikan konteks dan kita lanjutkan.';
 
 export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) => {
   // --- 1. CORE STORAGE & STATE ---
@@ -160,7 +160,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
         const newThread: ChatThread = {
           id: newId,
-          title: userPrompt.slice(0, 30).toUpperCase() || 'NEW_SESSION',
+          title: userPrompt.slice(0, 40) || 'Chat baru',
           persona: sendPersona,
           model_id: globalModelId,
           messages: [
@@ -179,7 +179,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
 
         const threadRef = threads.find((t) => t.id === currentThreadId);
         if (threadRef && threadRef.messages.length <= 2 && userPrompt) {
-          renameThread(currentThreadId, userPrompt.slice(0, 30).toUpperCase());
+          renameThread(currentThreadId, userPrompt.slice(0, 40));
         }
       }
 
@@ -268,7 +268,7 @@ export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) =
         id: uuidv4(),
         role: 'model',
         text: 'Akses pembuatan gambar tersedia di persona Hanisah.',
-        metadata: { status: 'error', model: 'SYSTEM_GATEKEEPER' }
+        metadata: { status: 'error', model: 'system' }
       };
       addMessage(targetId!, {
         id: uuidv4(),

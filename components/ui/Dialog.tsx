@@ -22,6 +22,7 @@ const getSizeClass = (size: DialogProps['size']) => {
 
 export const Dialog: React.FC<DialogProps> = ({ open, onClose, title, size = 'md', children, footer }) => {
     const overlayRef = useRef<HTMLDivElement | null>(null);
+    const previouslyFocused = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
         const handleKey = (e: KeyboardEvent) => {
@@ -29,14 +30,21 @@ export const Dialog: React.FC<DialogProps> = ({ open, onClose, title, size = 'md
             if (e.key === 'Backspace' && (e.metaKey || e.ctrlKey)) onClose();
         };
         if (open) {
+            previouslyFocused.current = document.activeElement as HTMLElement;
             document.body.style.overflow = 'hidden';
             window.addEventListener('keydown', handleKey);
+            setTimeout(() => {
+                const node = overlayRef.current;
+                const focusable = node?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                focusable?.focus();
+            }, 0);
         } else {
             document.body.style.overflow = '';
         }
         return () => {
             window.removeEventListener('keydown', handleKey);
             document.body.style.overflow = '';
+            previouslyFocused.current?.focus();
         };
     }, [open, onClose]);
 
@@ -45,11 +53,25 @@ export const Dialog: React.FC<DialogProps> = ({ open, onClose, title, size = 'md
     const content = (
         <div
             ref={overlayRef}
-            className="fixed inset-0 z-[1200] bg-black/50 backdrop-blur-sm flex items-center justify-center px-4 py-10 md:py-16"
+            className="fixed inset-0 z-[1200] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4 py-10 md:py-16"
             onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
             role="dialog"
             aria-modal="true"
             aria-label={title || 'Dialog'}
+            onKeyDown={(e) => {
+                if (e.key !== 'Tab') return;
+                const focusables = overlayRef.current?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                if (!focusables || focusables.length === 0) return;
+                const first = focusables[0];
+                const last = focusables[focusables.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }}
         >
             <div className={`relative w-full ${getSizeClass(size)} max-h-full overflow-hidden rounded-3xl border border-skin-border bg-skin-card shadow-[0_30px_120px_rgba(0,0,0,0.35)] flex flex-col`}>
                 <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-skin-border bg-skin-surface">

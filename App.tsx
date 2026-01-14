@@ -51,9 +51,9 @@ export const THEME_COLORS: Record<string, string> = {
 };
 
 const ViewLoader = () => (
-    <div className="h-full w-full flex flex-col items-center justify-center text-neutral-500 gap-4 animate-pulse">
+    <div className="h-full w-full flex flex-col items-center justify-center text-text-muted gap-3 animate-pulse">
         <Loader2 size={32} className="animate-spin text-accent" />
-        <span className="text-[10px] font-black uppercase tracking-[0.3em]">LOADING_MODULE...</span>
+        <span className="text-[12px] font-semibold tracking-wide">Loading experience…</span>
     </div>
 );
 
@@ -136,6 +136,9 @@ const AppContent: React.FC<AppContentProps> = ({ notes, setNotes, isDebugOpen, s
     root.style.setProperty('--on-accent-color', onAccentColor);
     root.style.setProperty('--on-accent-rgb', onAccentRgb);
     root.style.setProperty('--accent-glow', `rgba(${rgb.replace(/ /g, ', ')}, 0.45)`); 
+    root.style.setProperty('--accent', targetColor);
+    root.style.setProperty('--focus', targetColor);
+    root.style.setProperty('--focus-rgb', rgb);
     
     const navAccent = targetColor === '#000000' ? '#ffffff' : targetColor;
     root.style.setProperty('--nav-accent', navAccent);

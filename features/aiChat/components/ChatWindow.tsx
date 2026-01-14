@@ -1,4 +1,4 @@
-import React, { memo, useState, useMemo, useEffect, useRef, useCallback } from 'react';
+﻿import React, { memo, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import Markdown from 'react-markdown';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { Flame, Brain, Copy, Check, AlertTriangle, CheckCheck, Clock, ChevronDown } from 'lucide-react';
@@ -135,7 +135,7 @@ const MessageBubble = memo(
 
     const bubbleClasses = isModel
       ? 'bg-[var(--surface)] text-[var(--text)] border border-[color:var(--border)]'
-      : 'bg-[var(--accent)] text-[var(--on-accent-color)] border border-[color:var(--accent)]/40';
+      : 'bg-[var(--accent)] text-[var(--text-invert)] border border-[color:var(--accent)]/40';
 
     return (
       <div className={`flex w-full mb-5 ${isModel ? 'justify-start' : 'justify-end'} px-1`}>
@@ -149,7 +149,7 @@ const MessageBubble = memo(
 
         <div className={`flex flex-col max-w-[88%] sm:max-w-[80%] lg:max-w-[75%] min-w-0 ${isModel ? 'items-start' : 'items-end'}`}>
           <div className={`flex items-start gap-2 ${isModel ? 'flex-row' : 'flex-row-reverse'}`}>
-            <div className={`relative px-4 py-3 rounded-2xl shadow-sm text-[15px] leading-7 ${bubbleClasses}`}>
+            <div className={`relative px-4 py-3 rounded-2xl shadow-sm text-base leading-relaxed ${bubbleClasses}`}>
               {thought && (
                 <button
                   className="flex items-center gap-2 text-[12px] font-semibold text-[var(--text-muted)] mb-2"
@@ -353,3 +353,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = memo(
     );
   }
 );
+
+
+
+
+
+
+
+
