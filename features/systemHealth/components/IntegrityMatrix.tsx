@@ -10,9 +10,9 @@ import { useFeatures, type SystemFeature } from '../../../contexts/FeatureContex
 // --- UI ELEMENT NODE ---
 const UIElementNode: React.FC<{ id: string, status: UIStatus, errors: number, usage: number, onToggle: () => void }> = ({ id, status, errors, usage, onToggle }) => {
     const getStatusColor = () => {
-        if (status === 'DISABLED') return 'bg-red-900/10 border-red-500/50 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]';
-        if (status === 'UNSTABLE') return 'bg-amber-900/10 border-amber-500/50 text-amber-500 animate-pulse';
-        return 'bg-emerald-900/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-500/50 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]';
+        if (status === 'DISABLED') return 'bg-[color:var(--danger)]/10 border-[color:var(--danger)]/50 text-[color:var(--danger)] shadow-[0_0_15px_rgba(239,68,68,0.2)]';
+        if (status === 'UNSTABLE') return 'bg-[color:var(--warning)]/10 border-[color:var(--warning)]/50 text-[color:var(--warning)] animate-pulse';
+        return 'bg-[color:var(--success)]/10 border-[color:var(--success)]/30 text-[color:var(--success)] hover:bg-[color:var(--success)]/10 hover:border-[color:var(--success)]/50 hover:shadow-[0_0_15px_rgba(34,197,94,0.2)]';
     };
 
     const cleanName = id.replace(/UI_|BTN_/g, '').replace(/_/g, ' ');
@@ -31,9 +31,9 @@ const UIElementNode: React.FC<{ id: string, status: UIStatus, errors: number, us
 
             <div className="flex justify-between items-start relative z-10">
                 <div className="text-[8px] font-mono opacity-70">
-                    ERR: <span className={errors > 0 ? "text-red-400 font-bold" : ""}>{errors}</span>
+                    ERR: <span className={errors > 0 ? "text-[color:var(--danger)] font-bold" : ""}>{errors}</span>
                 </div>
-                <div className="p-1 rounded bg-black/40 text-white/50">
+                <div className="p-1 rounded bg-[color:var(--bg)]/40 text-[color:var(--text-muted)]">
                     {status === 'DISABLED' ? <ToggleLeft size={12} /> : <ToggleRight size={12} />}
                 </div>
             </div>
@@ -43,7 +43,7 @@ const UIElementNode: React.FC<{ id: string, status: UIStatus, errors: number, us
                     {cleanName}
                 </div>
                 <div className="flex items-center gap-2">
-                     <div className={`w-1.5 h-1.5 rounded-full ${status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                     <div className={`w-1.5 h-1.5 rounded-full ${status === 'ACTIVE' ? 'bg-[color:var(--success)]' : 'bg-[color:var(--danger)]'}`}></div>
                      <span className="text-[7px] font-mono opacity-80">{usage} INTERACTIONS</span>
                 </div>
             </div>
@@ -66,23 +66,23 @@ const FeatureToggleCard: React.FC<{
             w-full flex items-center justify-between p-4 rounded-xl border transition-all group text-left relative overflow-hidden
             ${isEnabled 
                 ? 'bg-[var(--accent)]/10 border-[color:var(--accent)]/30' 
-                : 'bg-zinc-900/50 border-white/5 opacity-60 hover:opacity-100'}
+                : 'bg-[color:var(--surface-2)]/50 border-white/5 opacity-60 hover:opacity-100'}
         `}
     >
         {isEnabled && <div className="absolute inset-0 bg-[var(--accent)]/5 animate-pulse pointer-events-none"></div>}
 
         <div className="flex items-center gap-4 relative z-10">
-            <div className={`p-2.5 rounded-lg transition-colors ${isEnabled ? 'bg-[var(--accent)] text-[var(--text-invert)] shadow-[0_0_15px_var(--accent-glow)]' : 'bg-white/5 text-neutral-500'}`}>
+            <div className={`p-2.5 rounded-lg transition-colors ${isEnabled ? 'bg-[var(--accent)] text-[var(--text-invert)] shadow-[0_0_15px_var(--accent-glow)]' : 'bg-white/5 text-[color:var(--text-muted)]'}`}>
                 {icon}
             </div>
             <div>
-                <h4 className={`text-[10px] font-black uppercase tracking-widest ${isEnabled ? 'text-white' : 'text-neutral-400'}`}>
+                <h4 className={`text-[10px] font-black uppercase tracking-widest ${isEnabled ? 'text-[color:var(--text)]' : 'text-[color:var(--text-muted)]'}`}>
                     {label}
                 </h4>
-                <p className="text-[9px] text-neutral-500 font-mono mt-0.5">{desc}</p>
+                <p className="text-[9px] text-[color:var(--text-muted)] font-mono mt-0.5">{desc}</p>
             </div>
         </div>
-        <div className={`transition-colors relative z-10 ${isEnabled ? 'text-[var(--accent)]' : 'text-neutral-600'}`}>
+        <div className={`transition-colors relative z-10 ${isEnabled ? 'text-[var(--accent)]' : 'text-[color:var(--text-muted)]'}`}>
             {isEnabled ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
         </div>
     </button>
@@ -104,7 +104,7 @@ export const IntegrityMatrix: React.FC = () => {
     };
 
     return (
-        <div className="flex-1 overflow-y-auto p-6 md:p-8 relative z-20 bg-[#0a0a0b] rounded-[32px] border border-white/5 shadow-2xl animate-slide-up">
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 relative z-20 bg-[color:var(--bg)] rounded-[32px] border border-white/5 shadow-2xl animate-slide-up">
             
             {/* Background Circuit Pattern */}
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none"></div>
@@ -114,8 +114,8 @@ export const IntegrityMatrix: React.FC = () => {
             <div className="mb-8 relative z-10">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                        <Shield size={18} className="text-[var(--accent)]" />
-                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">System Controls</h3>
+                        <Shield size={18} className="text-[color:var(--accent)]" />
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--text)]">System Controls</h3>
                     </div>
                     <span className="text-[9px] font-bold bg-[var(--accent)]/10 text-[var(--accent)] px-2 py-1 rounded border border-[color:var(--accent)]/30">Status: Active</span>
                 </div>
@@ -169,11 +169,11 @@ export const IntegrityMatrix: React.FC = () => {
             {/* SECTION 2: UI GOVERNANCE */}
             <div className="flex items-center justify-between mb-6 relative z-10">
                 <div className="flex items-center gap-3">
-                    <LayoutGrid size={18} className="text-emerald-500" />
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white">UI_GOVERNANCE_MATRIX</h3>
+                    <LayoutGrid size={18} className="text-[color:var(--success)]" />
+                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[color:var(--text)]">UI_GOVERNANCE_MATRIX</h3>
                 </div>
-                <div className="flex items-center gap-2 text-[9px] text-neutral-500 font-mono">
-                    <Info size={12} className="text-emerald-500" />
+                <div className="flex items-center gap-2 text-[9px] text-[color:var(--text-muted)] font-mono">
+                    <Info size={12} className="text-[color:var(--success)]" />
                     <span>TAP TO TOGGLE NODES</span>
                 </div>
             </div>
