@@ -12,6 +12,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { cn } from '../../utils/cn';
+import { BENTO_GRADIENTS } from '../../constants/bentoTheme';
 
 interface DashboardProps {
     onNavigate: (feature: FeatureID) => void;
@@ -190,66 +191,120 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes, userName =
                         </div>
                     </Card>
                 </header>
-                {/* Editorial Bento Grid */}
-                <section className="grid grid-cols-12 gap-5 auto-rows-auto">
+                {/* Premium Bento Grid */}
+                <section className="bento-grid grid grid-cols-12 gap-[var(--bento-gap)] auto-rows-auto">
                     {/* Hero Card: Daily Stoic */}
                     <div className="col-span-12 md:col-span-8 row-span-2">
                         <DailyStoicWidget />
                     </div>
-                    {/* Stat Cards: Editorial, not boxy */}
-                    <div className="col-span-6 md:col-span-4 flex flex-col gap-5">
-                        <StatCard label={t.nodes} value={notes.length.toString().padStart(2, '0')} icon={<FileText />} onClick={handleNavNotes} />
-                        <StatCard label={t.focus} value={`${syncLevel}%`} helper={isReady ? t.ready : t.syncing} icon={<Activity />} onClick={handleNavSystem} />
-                        <StatCard label={t.vault} value={isVaultUnlocked ? t.vaultUnlocked : t.vaultLocked} helper={vaultEnabled ? t.control : t.vaultDisabled} icon={isVaultUnlocked ? <Unlock /> : <Lock />} onClick={vaultEnabled ? handleToggleVault : undefined} />
-                    </div>
-                    {/* Feature Cards: Bento style */}
-                    <div className="col-span-12 md:col-span-6 lg:col-span-4">
-                        <FeatureCard title={t.chatTitle} desc={t.chatDesc} icon={<Brain />} onClick={handleNavChat} className="min-h-[180px] rounded-[24px]" delay={100} />
-                    </div>
-                    <div className="col-span-12 md:col-span-6 lg:col-span-4">
-                        <FeatureCard title={t.archiveTitle} desc={t.archiveDesc} icon={<Database />} onClick={handleNavArchive} className="min-h-[180px] rounded-[24px]" delay={200} />
-                    </div>
-                    <div className="col-span-12 lg:col-span-4">
-                        <FeatureCard title={t.toolsTitle} desc={t.toolsDesc} icon={<Zap />} onClick={handleNavTools} className="min-h-[180px] rounded-[24px]" delay={300} />
-                    </div>
-                    {/* Recent Notes: Editorial card */}
-                    <div className="col-span-12 md:col-span-8">
-                        <Card padding="lg" className="animate-slide-up border-border/60 shadow-[var(--shadow-soft)] rounded-[24px]" style={{ animationDelay: '400ms' }}>
-                            <div className="flex items-center justify-between border-b border-border pb-4 mb-4">
-                                <h3 className="section-title text-text">{t.recent}</h3>
-                                <Button variant="secondary" size="sm" onClick={handleNavNotes}>{t.viewAll}</Button>
+                    {/* Stat Cards: Bento style with gradients */}
+                    <div className="col-span-6 md:col-span-4 flex flex-col gap-[var(--bento-gap)]">
+                        <Card tone="bento-purple" padding="bento" interactive bento className="bento-card flex-1">
+                            <div className="bento-card-content">
+                                <div className="bento-card-icon">
+                                    <FileText size={24} />
+                                </div>
+                                <p className="caption opacity-80 mb-1">{t.nodes}</p>
+                                <p className="bento-card-title">{notes.length.toString().padStart(2, '0')}</p>
                             </div>
-                            <div className="space-y-3">
-                                {recentNotes.map((note) => (
-                                    <button key={note.id || `note-${note.title}`} onClick={() => onNavigate('notes')} className="w-full p-3 rounded-xl bg-surface-2 hover:bg-surface transition-colors text-left group" aria-label={`Open note: ${note.title || t.untitled}`}> 
-                                        <p className="section-title text-text group-hover:text-accent transition-colors">{note.title || t.untitled}</p>
-                                        <p className="caption text-text-muted mt-1">{formatDate(note.created)}</p>
-                                    </button>
-                                ))}
-                                {recentNotes.length === 0 && (
-                                    <p className="caption text-text-muted text-center py-6">{t.recentEmpty}</p>
-                                )}
+                        </Card>
+                        <Card tone="bento-teal" padding="bento" interactive bento className="bento-card flex-1" onClick={handleNavSystem}>
+                            <div className="bento-card-content">
+                                <div className="bento-card-icon">
+                                    <Activity size={24} />
+                                </div>
+                                <p className="caption opacity-80 mb-1">{t.focus}</p>
+                                <p className="bento-card-title">{syncLevel}%</p>
+                                <p className="bento-card-description mt-2">{isReady ? t.ready : t.syncing}</p>
+                            </div>
+                        </Card>
+                        <Card tone={isVaultUnlocked ? "bento-green" : "bento-orange"} padding="bento" interactive={vaultEnabled} bento className="bento-card flex-1" onClick={vaultEnabled ? handleToggleVault : undefined}>
+                            <div className="bento-card-content">
+                                <div className="bento-card-icon">
+                                    {isVaultUnlocked ? <Unlock size={24} /> : <Lock size={24} />}
+                                </div>
+                                <p className="caption opacity-80 mb-1">{t.vault}</p>
+                                <p className="bento-card-title">{isVaultUnlocked ? t.vaultUnlocked : t.vaultLocked}</p>
+                                <p className="bento-card-description mt-2">{vaultEnabled ? t.control : t.vaultDisabled}</p>
                             </div>
                         </Card>
                     </div>
-                    {/* Vault Control Card: Editorial */}
+                    {/* Feature Cards: Bento style with gradients */}
+                    <div className="col-span-12 md:col-span-6 lg:col-span-4">
+                        <Card tone="bento-blue" padding="bento" interactive bento className="bento-card min-h-[180px] animate-slide-up" style={{ animationDelay: '100ms' }} onClick={handleNavChat}>
+                            <div className="bento-card-content">
+                                <div className="bento-card-icon">
+                                    <Brain size={24} />
+                                </div>
+                                <h3 className="bento-card-title">{t.chatTitle}</h3>
+                                <p className="bento-card-description">{t.chatDesc}</p>
+                            </div>
+                        </Card>
+                    </div>
+                    <div className="col-span-12 md:col-span-6 lg:col-span-4">
+                        <Card tone="bento-teal" padding="bento" interactive bento className="bento-card min-h-[180px] animate-slide-up" style={{ animationDelay: '200ms' }} onClick={handleNavArchive}>
+                            <div className="bento-card-content">
+                                <div className="bento-card-icon">
+                                    <Database size={24} />
+                                </div>
+                                <h3 className="bento-card-title">{t.archiveTitle}</h3>
+                                <p className="bento-card-description">{t.archiveDesc}</p>
+                            </div>
+                        </Card>
+                    </div>
+                    <div className="col-span-12 lg:col-span-4">
+                        <Card tone="bento-orange" padding="bento" interactive bento className="bento-card min-h-[180px] animate-slide-up" style={{ animationDelay: '300ms' }} onClick={handleNavTools}>
+                            <div className="bento-card-content">
+                                <div className="bento-card-icon">
+                                    <Zap size={24} />
+                                </div>
+                                <h3 className="bento-card-title">{t.toolsTitle}</h3>
+                                <p className="bento-card-description">{t.toolsDesc}</p>
+                            </div>
+                        </Card>
+                    </div>
+                    {/* Recent Notes: Bento card */}
+                    <div className="col-span-12 md:col-span-8">
+                        <Card padding="bento" bento className="bento-card animate-slide-up" style={{ animationDelay: '400ms' }}>
+                            <div className="bento-card-content">
+                                <div className="flex items-center justify-between border-b border-border/30 pb-4 mb-4">
+                                    <h3 className="bento-card-title">{t.recent}</h3>
+                                    <Button variant="secondary" size="sm" onClick={handleNavNotes}>{t.viewAll}</Button>
+                                </div>
+                                <div className="space-y-3">
+                                    {recentNotes.map((note) => (
+                                        <button key={note.id || `note-${note.title}`} onClick={() => onNavigate('notes')} className="w-full p-3 rounded-xl bg-surface-2/50 hover:bg-surface-2 transition-colors text-left group backdrop-blur-sm" aria-label={`Open note: ${note.title || t.untitled}`}> 
+                                            <p className="section-title text-text group-hover:text-accent transition-colors">{note.title || t.untitled}</p>
+                                            <p className="caption text-text-muted mt-1">{formatDate(note.created)}</p>
+                                        </button>
+                                    ))}
+                                    {recentNotes.length === 0 && (
+                                        <p className="caption text-text-muted text-center py-6">{t.recentEmpty}</p>
+                                    )}
+                                </div>
+                            </div>
+                        </Card>
+                    </div>
+                    {/* Vault Control Card: Bento style */}
                     <div className="col-span-12 md:col-span-4">
-                        <Card padding="lg" className="animate-slide-up border-border/60 shadow-[var(--shadow-soft)] rounded-[24px]" style={{ animationDelay: '500ms' }}>
-                            <div className="flex items-start justify-between gap-4 mb-4">
-                                <div className="w-12 h-12 rounded-[var(--radius-xl)] bg-surface-2 border border-border flex items-center justify-center text-text-muted">
-                                    <DatabaseZap size={22} strokeWidth={1.7} />
+                        <Card padding="bento" bento className="bento-card animate-slide-up" style={{ animationDelay: '500ms' }}>
+                            <div className="bento-card-content">
+                                <div className="flex items-start justify-between gap-4 mb-4">
+                                    <div className="w-12 h-12 rounded-[var(--radius-xl)] bg-surface-2 border border-border/50 flex items-center justify-center text-text-muted backdrop-blur-sm">
+                                        <DatabaseZap size={22} strokeWidth={1.7} />
+                                    </div>
+                                    <Badge variant={isVaultUnlocked ? 'success' : 'neutral'}> {isVaultUnlocked ? t.vaultUnlocked : t.vaultLocked} </Badge>
                                 </div>
-                                <Badge variant={isVaultUnlocked ? 'success' : 'neutral'}> {isVaultUnlocked ? t.vaultUnlocked : t.vaultLocked} </Badge>
-                            </div>
-                            <div className="space-y-3">
-                                <div>
-                                    <h3 className="section-title text-text">{t.control}</h3>
-                                    <p className="caption text-text-muted mt-1"> {isVaultUnlocked ? t.vaultDescUnlocked : t.vaultDescLocked} </p>
+                                <div className="space-y-3">
+                                    <div>
+                                        <h3 className="bento-card-title">{t.control}</h3>
+                                        <p className="bento-card-description mt-1"> {isVaultUnlocked ? t.vaultDescUnlocked : t.vaultDescLocked} </p>
+                                    </div>
                                 </div>
+                                <Button onClick={vaultEnabled ? handleToggleVault : handleNavTools} variant={!vaultEnabled ? 'secondary' : isVaultUnlocked ? 'destructive' : 'primary'} size="lg" className={cn('mt-6 w-full', !vaultEnabled ? 'opacity-70' : '')} aria-label={!vaultEnabled ? t.vaultDisabled : isVaultUnlocked ? t.vaultLock : t.vaultUnlock}>
+                                    {isVaultUnlocked ? <Lock size={16} /> : <Unlock size={16} />} {!vaultEnabled ? t.vaultDisabled : isVaultUnlocked ? t.vaultLock : t.vaultUnlock}
+                                </Button>
                             </div>
-                            <Button onClick={vaultEnabled ? handleToggleVault : handleNavTools} variant={!vaultEnabled ? 'secondary' : isVaultUnlocked ? 'destructive' : 'primary'} size="lg" className={cn('mt-6 w-full', !vaultEnabled ? 'opacity-70' : '')} aria-label={!vaultEnabled ? t.vaultDisabled : isVaultUnlocked ? t.vaultLock : t.vaultUnlock}>
-                                {isVaultUnlocked ? <Lock size={16} /> : <Unlock size={16} />} {!vaultEnabled ? t.vaultDisabled : isVaultUnlocked ? t.vaultLock : t.vaultUnlock}
-                            </Button>
                         </Card>
                     </div>
                 </section>

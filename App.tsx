@@ -239,7 +239,7 @@ const AppContent: React.FC<AppContentProps> = ({ notes, setNotes, isDebugOpen, s
   };
 
   return (
-    <div className="flex h-[100dvh] w-full text-skin-text font-sans bg-skin-main theme-transition overflow-hidden selection:bg-accent/30 selection:text-accent relative">
+    <div className="flex h-[100dvh] h-screen w-full text-skin-text font-sans bg-skin-main theme-transition overflow-hidden selection:bg-accent/30 selection:text-accent relative safe-t safe-b safe-l safe-r">
       
       {/* 1. Global Ambient Background Layer */}
       <div className="absolute inset-0 pointer-events-none z-0 transform-gpu">
