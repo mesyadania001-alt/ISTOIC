@@ -13,6 +13,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { cn } from '../../utils/cn';
 import { BENTO_GRADIENTS } from '../../constants/bentoTheme';
+import { appStyles } from '../auth/appStyles';
 
 interface DashboardProps {
     onNavigate: (feature: FeatureID) => void;
@@ -51,14 +52,14 @@ const FeatureCard: React.FC<{ title: string; desc: string; icon: React.ReactNode
         className
     )}>
         <div className="flex items-start justify-between gap-4 mb-6">
-            <div className="w-12 h-12 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center text-text-muted">
+            <div className="w-12 h-12 rounded-[var(--radius-md)] bg-[color:var(--surface)] border border-[color:var(--border)] flex items-center justify-center text-[color:var(--text-muted)]">
                 {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement, { size: 22, strokeWidth: 1.7 }) : icon}
             </div>
-            <ChevronRight size={18} className="text-text-muted flex-shrink-0" />
+            <ChevronRight size={18} className="text-[color:var(--text-muted)] flex-shrink-0" />
         </div>
         <div className="space-y-2">
-            <h3 className="section-title text-text">{title}</h3>
-            <p className="caption text-text-muted">{desc}</p>
+            <h3 className="section-title text-[color:var(--text)]">{title}</h3>
+            <p className="caption text-[color:var(--text-muted)]">{desc}</p>
         </div>
     </Card>
 );
@@ -159,38 +160,43 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes, userName =
     const isReady = syncLevel >= 90;
 
     return (
-        <div className="h-full w-full overflow-y-auto flex flex-col px-4 pt-safe pb-safe md:px-8 lg:px-10 animate-fade-in relative z-10">
+        <div className={appStyles.page}>
             <VaultPinModal isOpen={showPinModal} onClose={() => setShowPinModal(false)} onSuccess={unlockVault} />
-            <div className="w-full max-w-7xl mx-auto py-6 md:py-10">
-                {/* Header */}
-                <header className="mb-8">
-                    <Card padding="lg" className="border-border/40 bg-gradient-to-br from-surface to-surface-2 rounded-[28px]">
-                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
-                            <div className="space-y-2">
-                                <h1 className="text-3xl md:text-4xl font-black tracking-tight text-text">Dashboard</h1>
-                                <p className="body-sm text-text-muted">Polos, bersih, fokus pada tindakan cepat.</p>
-                            </div>
-                            <div className="relative" ref={accountMenuRef}>
-                                <button onClick={() => setIsAccountOpen(!isAccountOpen)} className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-surface-2 transition-colors" aria-label="Account menu">
-                                    <div className="w-9 h-9 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-text-muted text-base font-semibold">
-                                        {userName.charAt(0).toUpperCase()}
-                                    </div>
-                                    <ChevronDown size={18} className={`text-text-muted transition-transform ${isAccountOpen ? 'rotate-180' : ''}`} />
-                                </button>
-                                {isAccountOpen && (
-                                    <Card padding="sm" className="absolute top-full right-0 mt-2 w-48 border-border/60 shadow-[var(--shadow-soft)] z-20 rounded-[20px]"> 
-                                        <div className="space-y-1">
-                                            <Button variant="ghost" size="sm" className="w-full justify-start text-text-muted hover:text-text" role="menuitem">{t.profile}</Button>
-                                            {onLogout && (
-                                                <Button variant="ghost" size="sm" className="w-full justify-start text-danger hover:bg-danger/10" onClick={() => { setIsAccountOpen(false); onLogout(); }} role="menuitem">{t.logout}</Button>
-                                            )}
+            <div className={appStyles.container}>
+                <div className="py-6 md:py-10">
+                    {/* Header */}
+                    <header className={appStyles.pageHeader}>
+                        <div className={appStyles.card}>
+                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+                                <div className="space-y-2">
+                                    <h1 className={appStyles.titleLarge}>Dashboard</h1>
+                                    <p className={appStyles.subtitle}>Polos, bersih, fokus pada tindakan cepat.</p>
+                                </div>
+                                <div className="relative" ref={accountMenuRef}>
+                                    <button 
+                                        onClick={() => setIsAccountOpen(!isAccountOpen)} 
+                                        className="flex items-center gap-2 px-3 py-2 rounded-[var(--radius-lg)] hover:bg-[color:var(--surface-2)] transition-colors border border-[color:var(--border)]/50" 
+                                        aria-label="Account menu"
+                                    >
+                                        <div className="w-9 h-9 rounded-[var(--radius-md)] bg-[color:var(--surface-2)] border border-[color:var(--border)] flex items-center justify-center text-[color:var(--text-muted)] text-base font-semibold">
+                                            {userName.charAt(0).toUpperCase()}
                                         </div>
-                                    </Card>
-                                )}
+                                        <ChevronDown size={18} className={`text-[color:var(--text-muted)] transition-transform ${isAccountOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {isAccountOpen && (
+                                        <div className={`${appStyles.cardCompact} absolute top-full right-0 mt-2 w-48 border-[color:var(--border)]/60 shadow-[var(--shadow-soft)] z-20`}> 
+                                            <div className="space-y-1">
+                                                <Button variant="ghost" size="sm" className="w-full justify-start text-[color:var(--text-muted)] hover:text-[color:var(--text)]" role="menuitem">{t.profile}</Button>
+                                                {onLogout && (
+                                                    <Button variant="ghost" size="sm" className="w-full justify-start text-[color:var(--danger)] hover:bg-[color:var(--danger)]/10" onClick={() => { setIsAccountOpen(false); onLogout(); }} role="menuitem">{t.logout}</Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </Card>
-                </header>
+                    </header>
                 {/* Premium Bento Grid */}
                 <section className="bento-grid grid grid-cols-12 gap-[var(--bento-gap)] auto-rows-auto">
                     {/* Hero Card: Daily Stoic */}
@@ -273,13 +279,18 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes, userName =
                                 </div>
                                 <div className="space-y-3">
                                     {recentNotes.map((note) => (
-                                        <button key={note.id || `note-${note.title}`} onClick={() => onNavigate('notes')} className="w-full p-3 rounded-xl bg-surface-2/50 hover:bg-surface-2 transition-colors text-left group backdrop-blur-sm" aria-label={`Open note: ${note.title || t.untitled}`}> 
-                                            <p className="section-title text-text group-hover:text-accent transition-colors">{note.title || t.untitled}</p>
-                                            <p className="caption text-text-muted mt-1">{formatDate(note.created)}</p>
+                                        <button 
+                                            key={note.id || `note-${note.title}`} 
+                                            onClick={() => onNavigate('notes')} 
+                                            className="w-full p-3 rounded-[var(--radius-lg)] bg-[color:var(--surface-2)]/50 hover:bg-[color:var(--surface-2)] transition-colors text-left group backdrop-blur-sm border border-[color:var(--border)]/30" 
+                                            aria-label={`Open note: ${note.title || t.untitled}`}
+                                        > 
+                                            <p className="section-title text-[color:var(--text)] group-hover:text-[color:var(--primary)] transition-colors">{note.title || t.untitled}</p>
+                                            <p className="caption text-[color:var(--text-muted)] mt-1">{formatDate(note.created)}</p>
                                         </button>
                                     ))}
                                     {recentNotes.length === 0 && (
-                                        <p className="caption text-text-muted text-center py-6">{t.recentEmpty}</p>
+                                        <p className="caption text-[color:var(--text-muted)] text-center py-6">{t.recentEmpty}</p>
                                     )}
                                 </div>
                             </div>

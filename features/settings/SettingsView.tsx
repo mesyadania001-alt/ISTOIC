@@ -505,17 +505,17 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                 <Card tone="bento-purple" padding="bento" bento className="bento-card">
                     <div className="bento-card-content">
                         <SettingsSection title={t.theme_label || "Appearance & language"} icon={<Palette size={18} />}>
-                    <div className="p-6 bg-[var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 grid grid-cols-1 md:grid-cols-2 gap-6 shadow-[var(--shadow-bento)]">
+                    <div className="p-6 bg-[color:var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 grid grid-cols-1 md:grid-cols-2 gap-6 shadow-[var(--shadow-bento)]">
                         
                         {/* Theme Toggle */}
                         <div className="space-y-3">
-                            <label className="caption text-text-muted pl-1">Color scheme</label>
-                            <div className="flex bg-surface-2 p-1 rounded-xl border border-border">
+                            <label className="caption text-[color:var(--text-muted)] pl-1">Color scheme</label>
+                            <div className="flex bg-[color:var(--surface-2)] p-1 rounded-[var(--radius-lg)] border border-[color:var(--border)]">
                                 {['light', 'system', 'dark'].map((mode) => (
                                     <button 
                                         key={mode}
                                         onClick={() => setColorScheme(mode as any)}
-                                        className={`flex-1 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 ${colorScheme === mode ? 'bg-surface text-accent shadow-sm border border-border' : 'text-text-muted hover:text-text'}`}
+                                        className={`flex-1 py-2 rounded-[var(--radius-md)] text-sm font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 ${colorScheme === mode ? 'bg-[color:var(--surface)] text-[color:var(--primary)] shadow-sm border border-[color:var(--border)]' : 'text-[color:var(--text-muted)] hover:text-[color:var(--text)]'}`}
                                     >
                                         {mode === 'light' && <Sun size={12} />}
                                         {mode === 'dark' && <Moon size={12} />}
@@ -528,15 +528,15 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
 
                         {/* Language */}
                         <div className="space-y-3">
-                            <label className="caption text-text-muted pl-1 flex items-center gap-2">
+                            <label className="caption text-[color:var(--text-muted)] pl-1 flex items-center gap-2">
                                 <Globe size={12} /> Language
                             </label>
-                            <div className="flex bg-surface-2 p-1 rounded-xl border border-border">
+                            <div className="flex bg-[color:var(--surface-2)] p-1 rounded-[var(--radius-lg)] border border-[color:var(--border)]">
                                 {['id', 'en', 'bn'].map((lang) => (
                                     <button 
                                         key={lang}
                                         onClick={() => { setAppLanguage(lang); window.location.reload(); }}
-                                        className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95 ${appLanguage === lang ? 'bg-surface text-accent shadow-sm border border-border' : 'text-text-muted hover:text-text'}`}
+                                        className={`flex-1 py-2 rounded-[var(--radius-md)] text-sm font-semibold transition-all active:scale-95 ${appLanguage === lang ? 'bg-[color:var(--surface)] text-[color:var(--primary)] shadow-sm border border-[color:var(--border)]' : 'text-[color:var(--text-muted)] hover:text-[color:var(--text)]'}`}
                                     >
                                         {lang}
                                     </button>
@@ -545,14 +545,14 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                         </div>
 
                         {/* ACCENT PALETTE */}
-                        <div className="space-y-3 col-span-1 md:col-span-2 border-t border-border pt-4">
-                            <label className="caption text-text-muted pl-1">Accent color</label>
-                            <div className="flex flex-wrap gap-3 p-3 bg-surface-2 rounded-xl border border-border">
+                        <div className="space-y-3 col-span-1 md:col-span-2 border-t border-[color:var(--border)] pt-4">
+                            <label className="caption text-[color:var(--text-muted)] pl-1">Accent color</label>
+                            <div className="flex flex-wrap gap-3 p-3 bg-[color:var(--surface-2)] rounded-[var(--radius-lg)] border border-[color:var(--border)]">
                                 {Object.entries(THEME_COLORS).map(([key, color]) => (
                                     <button
                                         key={key}
                                         onClick={() => setAppTheme(key)}
-                                        className={`relative w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center transform hover:scale-110 active:scale-95 ${appTheme === key ? 'border-text scale-110 shadow-lg' : 'border-transparent'}`}
+                                        className={`relative w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center transform hover:scale-110 active:scale-95 ${appTheme === key ? 'border-[color:var(--text)] scale-110 shadow-lg' : 'border-transparent'}`}
                                         style={{ backgroundColor: color }}
                                         aria-label={`Select ${key} theme`}
                                     >
