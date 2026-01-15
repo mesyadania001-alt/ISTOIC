@@ -44,7 +44,7 @@ export type GoogleLoginResult =
   | { status: "CANCELLED"; message: string }
   | { status: "ERROR"; message: string };
 
-const AUTH_TIMEOUT_MS = 15000;
+const AUTH_TIMEOUT_MS = 20000;
 
 function isNative(): boolean {
   return Capacitor.isNativePlatform();
@@ -62,15 +62,28 @@ function isIosPwa(): boolean {
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Request timeout. Please try again.")), timeoutMs);
+    let isResolved = false;
+    const timer = setTimeout(() => {
+      if (!isResolved) {
+        isResolved = true;
+        reject(new Error("Request timeout. Please try again."));
+      }
+    }, timeoutMs);
+    
     promise
       .then((value) => {
-        clearTimeout(timer);
-        resolve(value);
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          resolve(value);
+        }
       })
       .catch((error) => {
-        clearTimeout(timer);
-        reject(error);
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          reject(error);
+        }
       });
   });
 }
@@ -197,13 +210,21 @@ export const IstokIdentityService = {
 
     try {
       const result = await withTimeout(getRedirectResult(auth));
-      if (!result?.user) return null;
+      if (!result?.user) {
+        // Clear the redirect flag if no result
+        sessionStorage.removeItem("istok_login_redirect");
+        return null;
+      }
 
       const user = result.user;
       const existing = await fetchProfile(user.uid);
-      if (existing) return existing;
+      if (existing) {
+        sessionStorage.removeItem("istok_login_redirect");
+        return existing;
+      }
 
       const base = normalizeUser(user);
+      sessionStorage.removeItem("istok_login_redirect");
       return {
         ...base,
         istokId: "",
@@ -212,6 +233,8 @@ export const IstokIdentityService = {
     } catch (err: any) {
       const msg = friendlyAuthError(err);
       debugService.log("WARN", "ISTOK_AUTH", "REDIRECT_FINALIZE_FAIL", msg);
+      // Always clear the flag on error to prevent infinite loops
+      sessionStorage.removeItem("istok_login_redirect");
       return null;
     }
   },

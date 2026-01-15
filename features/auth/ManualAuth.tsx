@@ -28,21 +28,35 @@ import { IstokIdentityService, IStokUserIdentity } from '../istok/services/istok
 import { setSystemPin } from '../../utils/crypto';
 import { authStyles } from './authStyles';
 
-const AUTH_TIMEOUT_MS = 15000;
+const AUTH_TIMEOUT_MS = 20000;
 
-const withTimeout = async <T,>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promise<T> =>
-  new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Request timeout. Coba lagi.')), timeoutMs);
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promise<T> => {
+  return new Promise<T>((resolve, reject) => {
+    let isResolved = false;
+    const timer = setTimeout(() => {
+      if (!isResolved) {
+        isResolved = true;
+        reject(new Error('Request timeout. Coba lagi.'));
+      }
+    }, timeoutMs);
+    
     promise
       .then((value) => {
-        clearTimeout(timer);
-        resolve(value);
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          resolve(value);
+        }
       })
       .catch((error) => {
-        clearTimeout(timer);
-        reject(error);
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          reject(error);
+        }
       });
   });
+};
 
 export const isValidEmail = (value: string) => /\S+@\S+\.\S+/.test(value);
 
@@ -123,6 +137,9 @@ export const LoginManual: React.FC<{ onBack: () => void; onSuccess: ManualAuthSu
       return;
     }
 
+    // Prevent multiple simultaneous attempts
+    if (loading) return;
+
     setLoading(true);
     setError('');
     setInfo('');
@@ -133,15 +150,23 @@ export const LoginManual: React.FC<{ onBack: () => void; onSuccess: ManualAuthSu
       const user = userCredential.user;
 
       if (!user.emailVerified) {
-        await withTimeout(sendEmailVerification(user));
-        setInfo('Email belum diverifikasi. Link verifikasi dikirim ulang.');
+        try {
+          await withTimeout(sendEmailVerification(user));
+          setInfo('Email belum diverifikasi. Link verifikasi dikirim ulang.');
+        } catch (e) {
+          console.warn('Failed to send verification email', e);
+        }
       }
 
       let identity: IStokUserIdentity | null = null;
       if (db) {
-        const snap = await withTimeout(getDoc(doc(db, 'users', user.uid)));
-        if (snap.exists()) {
-          identity = snap.data() as IStokUserIdentity;
+        try {
+          const snap = await withTimeout(getDoc(doc(db, 'users', user.uid)));
+          if (snap.exists()) {
+            identity = snap.data() as IStokUserIdentity;
+          }
+        } catch (e) {
+          console.warn('Failed to fetch user profile', e);
         }
       }
 
@@ -244,6 +269,9 @@ export const RegisterManual: React.FC<{ onBack: () => void; onSuccess: ManualAut
       return;
     }
 
+    // Prevent multiple simultaneous attempts
+    if (loading) return;
+
     setLoading(true);
     setError('');
     setInfo('');
@@ -253,10 +281,18 @@ export const RegisterManual: React.FC<{ onBack: () => void; onSuccess: ManualAut
       const userCredential = await withTimeout(createUserWithEmailAndPassword(auth, email, password));
 
       if (fullName.trim()) {
-        await withTimeout(updateProfile(userCredential.user, { displayName: fullName.trim() }));
+        try {
+          await withTimeout(updateProfile(userCredential.user, { displayName: fullName.trim() }));
+        } catch (e) {
+          console.warn('Failed to update profile', e);
+        }
       }
 
-      await withTimeout(sendEmailVerification(userCredential.user));
+      try {
+        await withTimeout(sendEmailVerification(userCredential.user));
+      } catch (e) {
+        console.warn('Failed to send verification email', e);
+      }
 
       const identity = buildFallbackIdentity(userCredential.user.uid, email, fullName.trim());
       await IstokIdentityService.createProfile(identity);

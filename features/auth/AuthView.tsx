@@ -87,6 +87,9 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
   const [isHardLocked, setIsHardLocked] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
+  // Prevent multiple simultaneous auth attempts
+  const [isAuthAttemptInProgress, setIsAuthAttemptInProgress] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   const triggerShake = () => {
@@ -178,13 +181,20 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
+    let initTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let isInitializing = false;
 
     const initFlow = async () => {
+      // Prevent concurrent initialization
+      if (isInitializing) return;
+      isInitializing = true;
+
       setError(null);
 
       if (firebaseConfigError) {
         setStage("WELCOME");
         setNiceError(firebaseConfigError);
+        isInitializing = false;
         return;
       }
 
@@ -206,13 +216,14 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         } else {
           setStage("SETUP_PIN");
         }
+        isInitializing = false;
         return;
       }
 
-      // Handle redirect flow (PWA iOS)
-      if (sessionStorage.getItem("istok_login_redirect") === "pending") {
+      // Handle redirect flow (PWA iOS) - only check once
+      const redirectPending = sessionStorage.getItem("istok_login_redirect") === "pending";
+      if (redirectPending && !isAuthAttemptInProgress) {
         const redirectIdentity = await IstokIdentityService.finalizeRedirectIfAny();
-        sessionStorage.removeItem("istok_login_redirect");
 
         if (redirectIdentity) {
           if (redirectIdentity.istokId) {
@@ -228,11 +239,13 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             } else {
               setStage("SETUP_PIN");
             }
+            isInitializing = false;
             return;
           }
 
           setPendingGoogleUser(redirectIdentity);
           setStage("CREATE_ID");
+          isInitializing = false;
           return;
         }
       }
@@ -241,6 +254,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         unsub = onAuthStateChanged(auth, async (user) => {
           if (!user) {
             setStage("WELCOME");
+            isInitializing = false;
             return;
           }
 
@@ -276,20 +290,28 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             console.error("Silent Restore Failed", e);
             setStage("WELCOME");
           }
+          isInitializing = false;
         });
       } else {
         setStage("WELCOME");
+        isInitializing = false;
       }
     };
 
-    initFlow();
+    initTimeoutId = setTimeout(initFlow, 100);
+    
     return () => {
       if (unsub) unsub();
+      if (initTimeoutId) clearTimeout(initTimeoutId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identity?.istokId, bioEnabled, isHardLocked]);
 
   const handleGoogleLogin = async () => {
+    // Prevent multiple simultaneous attempts
+    if (loading || isAuthAttemptInProgress) return;
+
+    setIsAuthAttemptInProgress(true);
     sessionStorage.setItem("istok_login_redirect", "pending");
     setLoading(true);
     setError(null);
@@ -298,6 +320,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
       const res = await IstokIdentityService.loginWithGoogle();
 
       if (res.status === "REDIRECT_STARTED") {
+        // Don't immediately reset loading - keep the redirect state
         return;
       }
 
@@ -341,6 +364,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
       sessionStorage.removeItem("istok_login_redirect");
     } finally {
       setLoading(false);
+      setIsAuthAttemptInProgress(false);
     }
   };
 
