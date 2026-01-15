@@ -27,6 +27,19 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 
 /**
+ * Helper function to detect iOS PWA
+ */
+function isIosPwa(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = window.navigator.userAgent || "";
+  const isIos = /iPad|iPhone|iPod/.test(ua);
+  const isStandalone =
+    window.matchMedia?.("(display-mode: standalone)")?.matches ||
+    (window.navigator as { standalone?: boolean }).standalone === true;
+  return isIos && isStandalone;
+}
+
+/**
  * Note: Tangkap redirect balik dari browser ke app (Capacitor)
  * Ini penting untuk Firebase Google Login redirect.
  */
@@ -44,6 +57,31 @@ if (Capacitor.isNativePlatform()) {
     // Kembalikan ke root app (hindari nyangkut di handler page)
     window.location.replace('/');
   });
+}
+
+/**
+ * Handle redirect result for PWA (especially iOS PWA)
+ * This ensures redirect login completes properly after returning from Google
+ */
+if (!Capacitor.isNativePlatform() && isIosPwa()) {
+  // Check for redirect result immediately on load
+  getRedirectResult(auth)
+    .then((result) => {
+      if (result?.user) {
+        console.log('[PWA_REDIRECT] User signed in via redirect');
+        // Clear any stale flags
+        sessionStorage.removeItem("istok_login_redirect");
+        sessionStorage.removeItem("istok_redirect_processed");
+        // Reload to trigger auth state update
+        window.location.reload();
+      }
+    })
+    .catch((error) => {
+      console.warn('[PWA_REDIRECT] No redirect result or error:', error);
+      // Clear flags on error to prevent loops
+      sessionStorage.removeItem("istok_login_redirect");
+      sessionStorage.removeItem("istok_redirect_processed");
+    });
 }
 
 /**

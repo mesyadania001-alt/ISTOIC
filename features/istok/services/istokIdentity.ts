@@ -60,6 +60,31 @@ function isIosPwa(): boolean {
   return isIos && isStandalone;
 }
 
+function shouldUseRedirect(): boolean {
+  // Always use redirect for native and iOS PWA
+  if (isNative() || isIosPwa()) return true;
+  
+  // Check for COOP policy that blocks popups
+  try {
+    // Test if window.closed is accessible (COOP blocks this)
+    const testWindow = window.open('', '_blank');
+    if (testWindow) {
+      try {
+        const closed = testWindow.closed;
+        testWindow.close();
+      } catch {
+        // COOP blocks window.closed access
+        return true;
+      }
+    }
+  } catch {
+    // Popup blocked or COOP policy active
+    return true;
+  }
+  
+  return false;
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let isResolved = false;
@@ -173,26 +198,45 @@ export const IstokIdentityService = {
     await ensureAuthPersistence("local");
 
     try {
-      if (isNative() || isIosPwa()) {
+      // Use redirect for native, iOS PWA, or when COOP blocks popups
+      if (shouldUseRedirect()) {
         await signInWithRedirect(auth, googleProvider);
         return { status: "REDIRECT_STARTED" };
       }
 
-      const result = await withTimeout(signInWithPopup(auth, googleProvider));
-      const user = result.user;
+      // Try popup first, fallback to redirect on COOP error
+      try {
+        const result = await withTimeout(signInWithPopup(auth, googleProvider));
+        const user = result.user;
 
-      const existing = await fetchProfile(user.uid);
-      if (existing) return { status: "SIGNED_IN", identity: existing };
+        const existing = await fetchProfile(user.uid);
+        if (existing) return { status: "SIGNED_IN", identity: existing };
 
-      const base = normalizeUser(user);
-      return {
-        status: "SIGNED_IN",
-        identity: {
-          ...base,
-          istokId: "",
-          codename: "",
-        },
-      };
+        const base = normalizeUser(user);
+        return {
+          status: "SIGNED_IN",
+          identity: {
+            ...base,
+            istokId: "",
+            codename: "",
+          },
+        };
+      } catch (popupErr: any) {
+        // If popup fails due to COOP or popup blocked, fallback to redirect
+        const errMsg = String(popupErr?.message || "");
+        if (
+          errMsg.includes("Cross-Origin-Opener-Policy") ||
+          errMsg.includes("window.closed") ||
+          errMsg.includes("popup-blocked") ||
+          popupErr?.code === "auth/popup-blocked"
+        ) {
+          debugService.log("INFO", "ISTOK_AUTH", "POPUP_BLOCKED_FALLBACK", "Falling back to redirect");
+          await signInWithRedirect(auth, googleProvider);
+          return { status: "REDIRECT_STARTED" };
+        }
+        // Re-throw other errors
+        throw popupErr;
+      }
     } catch (err: any) {
       const msg = friendlyAuthError(err);
       if (msg.includes("cancelled")) {
@@ -204,27 +248,41 @@ export const IstokIdentityService = {
   },
 
   finalizeRedirectIfAny: async (): Promise<IStokUserIdentity | null> => {
-    if (!auth || !db) return null;
+    if (!auth || !db) {
+      sessionStorage.removeItem("istok_login_redirect");
+      return null;
+    }
 
-    await ensureAuthPersistence("local");
+    // Prevent multiple simultaneous calls
+    const redirectKey = "istok_redirect_processing";
+    if (sessionStorage.getItem(redirectKey) === "true") {
+      return null;
+    }
+    sessionStorage.setItem(redirectKey, "true");
 
     try {
-      const result = await withTimeout(getRedirectResult(auth));
+      await ensureAuthPersistence("local");
+
+      const result = await withTimeout(getRedirectResult(auth), 5000);
       if (!result?.user) {
-        // Clear the redirect flag if no result
+        // Clear flags if no result
         sessionStorage.removeItem("istok_login_redirect");
+        sessionStorage.removeItem(redirectKey);
         return null;
       }
 
       const user = result.user;
       const existing = await fetchProfile(user.uid);
+      
+      // Always clear flags before returning
+      sessionStorage.removeItem("istok_login_redirect");
+      sessionStorage.removeItem(redirectKey);
+      
       if (existing) {
-        sessionStorage.removeItem("istok_login_redirect");
         return existing;
       }
 
       const base = normalizeUser(user);
-      sessionStorage.removeItem("istok_login_redirect");
       return {
         ...base,
         istokId: "",
@@ -233,8 +291,9 @@ export const IstokIdentityService = {
     } catch (err: any) {
       const msg = friendlyAuthError(err);
       debugService.log("WARN", "ISTOK_AUTH", "REDIRECT_FINALIZE_FAIL", msg);
-      // Always clear the flag on error to prevent infinite loops
+      // Always clear flags on error to prevent infinite loops
       sessionStorage.removeItem("istok_login_redirect");
+      sessionStorage.removeItem(redirectKey);
       return null;
     }
   },
