@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">ISTOIC</string>
-    <string name="title_activity_main">ISTOIC</string>
-    <string name="package_name">com.istoic.app</string>
-    <string name="custom_url_scheme">com.istoic.app</string>
-</resources>
