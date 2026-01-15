@@ -408,8 +408,8 @@ export const SystemHealthView: React.FC = () => {
             </div>
 
             {/* Tab Navigation */}
-            <div className="flex mt-4 pt-4 border-t border-border/50">
-              <div className="flex gap-2 bg-surface border border-border rounded-[var(--radius-md)] p-1 shadow-[var(--shadow-soft)]">
+            <div className="flex mt-4 pt-4 border-t border-[color:var(--border)]/50">
+              <div className="flex gap-2 bg-[var(--surface)] border border-[color:var(--border)]/50 rounded-[var(--radius-md)] p-1 shadow-[var(--shadow-soft)]">
                 {[
                   { key: 'OVERVIEW', icon: <Activity size={14} />, label: 'Overview' },
                   { key:  'LOGS', icon: <Terminal size={14} />, label:  'Logs' },
@@ -420,8 +420,8 @@ export const SystemHealthView: React.FC = () => {
                     onClick={() => setActiveTab(tab.key as any)}
                     className={`px-4 py-2 rounded-[var(--radius-sm)] caption font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
                       activeTab === tab.key
-                        ? 'bg-accent text-text-invert shadow-[0_8px_16px_-4px_rgba(var(--accent-rgb),0.3)]'
-                        : 'text-text-muted hover:text-text'
+                        ? 'bg-[var(--accent)] text-[var(--text-invert)] shadow-[var(--shadow-bento)]'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text)]'
                     }`}
                   >
                     {tab. icon}
@@ -437,7 +437,7 @@ export const SystemHealthView: React.FC = () => {
         <div className="flex-1 min-h-0 overflow-hidden">
           {/* ─── OVERVIEW TAB ─── */}
           {activeTab === 'OVERVIEW' && (
-            <div className="bento-grid grid grid-cols-1 lg:grid-cols-12 gap-[var(--bento-gap)] h-full overflow-y-auto pb-6 custom-scroll">
+            <div className="bento-grid grid grid-cols-1 lg:grid-cols-12 gap-[var(--bento-gap)] h-full overflow-y-auto pb-6 custom-scroll animate-fade-in">
               <div className="lg:col-span-8 space-y-6">
                 {/* Metrics Grid */}
                 <div className="bento-grid grid grid-cols-1 md:grid-cols-3 gap-[var(--bento-gap)]">
@@ -588,7 +588,7 @@ export const SystemHealthView: React.FC = () => {
 
           {/* ─── LOGS TAB ─── */}
           {activeTab === 'LOGS' && (
-            <Card className="h-full flex flex-col border-border/70 overflow-hidden">
+            <Card className="h-full flex flex-col border-[color:var(--border)]/50 overflow-hidden shadow-[var(--shadow-bento)] rounded-[var(--bento-radius)] animate-fade-in">
               {/* Log Controls */}
               <div className="p-4 border-b border-border flex items-center justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-2">
@@ -690,8 +690,8 @@ export const SystemHealthView: React.FC = () => {
 
           {/* ─── INTEGRITY TAB ─── */}
           {activeTab === 'INTEGRITY' && (
-            <div className="h-full overflow-y-auto custom-scroll pb-6">
-              <Card className="border-border/70">
+            <div className="h-full overflow-y-auto custom-scroll pb-6 animate-fade-in">
+              <Card className="border-[color:var(--border)]/50 shadow-[var(--shadow-bento)] rounded-[var(--bento-radius)]">
                 <IntegrityMatrix />
               </Card>
             </div>

@@ -334,11 +334,11 @@ export const ChatInput: React.FC<ChatInputProps> = memo(
         )}
 
         <div
-          className={`w-full transition-all duration-300 bg-[var(--surface)] border border-[color:var(--border)]/80 rounded-[24px] p-3 flex flex-col shadow-[0_10px_30px_rgba(15,23,42,0.08)] ${
+          className={`w-full transition-all duration-300 bg-[var(--surface)] border border-[color:var(--border)]/50 rounded-[var(--bento-radius)] p-3 flex flex-col shadow-[var(--shadow-bento)] ${
             isDictating
-              ? 'ring-2 ring-[color:var(--accent)] border-[color:var(--accent)]/60'
+              ? 'ring-2 ring-[color:var(--accent)] border-[color:var(--accent)]/50'
               : isFocused || isDragOver
-                ? 'ring-2 ring-[color:var(--accent)]/40 border-[color:var(--accent)]/40'
+                ? 'ring-2 ring-[color:var(--accent)]/30 border-[color:var(--accent)]/30'
                 : ''
           }`}
           style={{
@@ -516,22 +516,22 @@ export const ChatInput: React.FC<ChatInputProps> = memo(
                 <button
                   onClick={handleStop}
                   aria-label="Stop generation"
-                  className="min-w-[56px] min-h-[56px] rounded-2xl flex items-center justify-center transition-all duration-300 bg-gradient-to-r from-[var(--danger)] to-[var(--danger)]/80 text-white shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 border border-[color:var(--danger)]/40"
+                  className="min-w-[56px] min-h-[56px] rounded-[var(--radius-lg)] flex items-center justify-center transition-all duration-300 bg-gradient-to-r from-[var(--danger)] to-[var(--danger)]/80 text-white shadow-[var(--shadow-bento)] hover:shadow-[var(--shadow-strong)] hover:scale-105 active:scale-95 border border-[color:var(--danger)]/30"
                   title="Stop generation"
                 >
                   <Square size={24} strokeWidth={2.5} />
                 </button>
               ) : (
-                <button
-                  onClick={handleSubmit}
-                  disabled={(!input.trim() && !attachment) || input.length > MAX_CHARS}
-                  aria-label="Send message"
-                  className={`min-w-[56px] min-h-[56px] rounded-2xl flex items-center justify-center transition-all duration-300 border font-semibold ${
-                    input.trim() || attachment
-                      ? 'bg-gradient-to-r from-[var(--accent)] to-[var(--accent-2)] text-white border-transparent shadow-lg hover:shadow-xl hover:scale-105 active:scale-95'
-                      : 'bg-[var(--surface-2)]/40 text-[var(--text-muted)] cursor-not-allowed border-transparent'
-                  }`}
-                >
+              <button
+                onClick={handleSubmit}
+                disabled={(!input.trim() && !attachment) || input.length > MAX_CHARS}
+                aria-label="Send message"
+                className={`min-w-[56px] min-h-[56px] rounded-[var(--radius-lg)] flex items-center justify-center transition-all duration-300 border font-semibold ${
+                  input.trim() || attachment
+                    ? 'bg-gradient-to-r from-[var(--accent)] to-[var(--accent-2)] text-white border-transparent shadow-[var(--shadow-bento)] hover:shadow-[var(--shadow-strong)] hover:scale-105 active:scale-95'
+                    : 'bg-[var(--surface-2)]/40 text-[var(--text-muted)] cursor-not-allowed border-transparent'
+                }`}
+              >
                   <CornerDownLeft size={24} strokeWidth={2.5} />
                 </button>
               )}

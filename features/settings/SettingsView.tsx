@@ -75,7 +75,7 @@ const SettingsSection: React.FC<{ title: string, icon: React.ReactNode, children
 const ToolRow: React.FC<{ label: string, desc: string, icon: React.ReactNode, isActive: boolean, onToggle: () => void }> = memo(({ label, desc, icon, isActive, onToggle }) => (
     <button 
         onClick={onToggle}
-        className={`w-full flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-border/70 shadow-[var(--shadow-soft)] transition-all active:scale-[0.98] hover:-translate-y-0.5 ${isActive ? 'bg-surface ring-1 ring-accent/20' : 'bg-surface-2'}`}
+        className={`w-full flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-[color:var(--border)]/50 shadow-[var(--shadow-bento)] transition-all active:scale-[0.98] hover:-translate-y-0.5 ${isActive ? 'bg-[var(--surface)] ring-1 ring-[color:var(--accent)]/20' : 'bg-[var(--surface-2)]'}`}
     >
         <div className="flex items-center gap-3">
             <div className={`p-2 rounded-lg border ${isActive ? 'bg-accent/10 text-accent border-accent/40' : 'bg-surface text-text-muted border-border/60'}`}>
@@ -505,7 +505,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                 <Card tone="bento-purple" padding="bento" bento className="bento-card">
                     <div className="bento-card-content">
                         <SettingsSection title={t.theme_label || "Appearance & language"} icon={<Palette size={18} />}>
-                    <div className="p-6 bg-surface rounded-[24px] border border-border/70 grid grid-cols-1 md:grid-cols-2 gap-6 shadow-[var(--shadow-soft)]">
+                    <div className="p-6 bg-[var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 grid grid-cols-1 md:grid-cols-2 gap-6 shadow-[var(--shadow-bento)]">
                         
                         {/* Theme Toggle */}
                         <div className="space-y-3">
@@ -573,10 +573,10 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                 <Card tone="bento-teal" padding="bento" bento className="bento-card">
                     <div className="bento-card-content">
                         <SettingsSection title={t.identity_title || "Profile"} icon={<UserCheck size={18} />}>
-                    <div className="p-6 bg-surface rounded-[24px] border border-border/70 space-y-6 shadow-[var(--shadow-soft)]">
+                    <div className="p-6 bg-[var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 space-y-6 shadow-[var(--shadow-bento)]">
                         
                         {/* ID EDITOR */}
-                        <div className="space-y-3 pb-6 border-b border-border/70">
+                        <div className="space-y-3 pb-6 border-b border-[color:var(--border)]/50">
                             <label className="caption text-text-muted pl-1">Account ID</label>
                             {!isEditingId ? (
                                 <div className="flex justify-between items-center bg-surface-2 p-4 rounded-2xl border border-border">
@@ -662,8 +662,8 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                 <Card tone="bento-orange" padding="bento" bento className="bento-card">
                     <div className="bento-card-content">
                         <SettingsSection title="Assistant profile" icon={<Brain size={18} />}>
-                    <div className="p-6 bg-surface rounded-[24px] border border-border/70 shadow-[var(--shadow-soft)]">
-                        <div className="flex bg-surface-2 p-1 rounded-xl border border-border/70 mb-6">
+                    <div className="p-6 bg-[var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 shadow-[var(--shadow-bento)]">
+                        <div className="flex bg-[var(--surface-2)] p-1 rounded-xl border border-[color:var(--border)]/50 mb-6 shadow-[var(--shadow-soft)]">
                              <button onClick={() => setActiveConfigTab('HANISAH')} className={`flex-1 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 ${activeConfigTab === 'HANISAH' ? 'bg-surface text-orange-500 shadow-sm' : 'text-text-muted hover:text-text'}`}>
                                 <Zap size={12}/> Hanisah (Creative)
                              </button>
@@ -727,7 +727,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                 <Card tone="bento-green" padding="bento" bento className="bento-card">
                     <div className="bento-card-content">
                         <SettingsSection title="AI providers" icon={<Server size={18} />}>
-                    <div className="p-6 bg-surface rounded-[24px] border border-border/70 shadow-[var(--shadow-soft)] grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="p-6 bg-[var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 shadow-[var(--shadow-bento)] grid grid-cols-1 md:grid-cols-2 gap-3">
                         {['GEMINI', 'GROQ', 'OPENAI', 'DEEPSEEK', 'MISTRAL', 'HUGGINGFACE', 'ELEVENLABS'].map(p => (
                             <ProviderToggleRow 
                                 key={p} 
@@ -748,9 +748,9 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                 <Card tone="bento-red" padding="bento" bento className="bento-card">
                     <div className="bento-card-content">
                         <SettingsSection title="Security" icon={<Lock size={18} />}>
-                    <div className="p-6 bg-surface rounded-[24px] border border-border/70 shadow-[var(--shadow-soft)] space-y-4">
+                    <div className="p-6 bg-[var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 shadow-[var(--shadow-bento)] space-y-4">
                         <div className="space-y-4">
-                            <div className="flex items-center justify-between p-4 bg-surface-2 rounded-xl border border-border/70">
+                            <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[var(--radius-md)] border border-[color:var(--border)]/50 shadow-[var(--shadow-soft)]">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-surface rounded-lg text-text"><KeyRound size={16}/></div>
                                     <div>
@@ -770,7 +770,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                             </div>
 
                             {showChangePin && (
-                                <div className="p-4 bg-surface-2 rounded-xl border border-border/70 space-y-4 animate-slide-up">
+                                <div className="p-4 bg-[var(--surface-2)] rounded-[var(--radius-md)] border border-[color:var(--border)]/50 space-y-4 animate-slide-up shadow-[var(--shadow-soft)]">
                                     {isSystemPinConfigured() ? (
                                         <>
                                             <FormField label="Current PIN">
@@ -845,7 +845,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
 
                             {auth && auth.currentUser && auth.currentUser.email && (
                                 <>
-                                    <div className="flex items-center justify-between p-4 bg-surface-2 rounded-xl border border-border/70">
+                                    <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[var(--radius-md)] border border-[color:var(--border)]/50 shadow-[var(--shadow-soft)]">
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 bg-surface rounded-lg text-text"><Lock size={16}/></div>
                                             <div>
@@ -863,7 +863,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                                     </div>
 
                                     {showChangePassword && (
-                                        <div className="p-4 bg-surface-2 rounded-xl border border-border/70 space-y-4 animate-slide-up">
+                                        <div className="p-4 bg-[var(--surface-2)] rounded-[var(--radius-md)] border border-[color:var(--border)]/50 space-y-4 animate-slide-up shadow-[var(--shadow-soft)]">
                                             <FormField label="Current Password">
                                                 <input
                                                     type="password"
@@ -938,7 +938,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                     <div className="bento-card-content">
                         <SettingsSection title={t.data_title || "Data"} icon={<Database size={18} />}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <button onClick={handleBackup} className="p-4 bg-surface border border-border/70 hover:border-blue-500/50 rounded-2xl flex items-center gap-3 group transition-all active:scale-95 shadow-[var(--shadow-soft)]">
+                        <button onClick={handleBackup} className="p-4 bg-[var(--surface)] border border-[color:var(--border)]/50 hover:border-blue-500/50 rounded-[var(--bento-radius)] flex items-center gap-3 group transition-all active:scale-95 shadow-[var(--shadow-bento)]">
                             <div className="p-2.5 bg-blue-500/10 text-blue-500 rounded-lg group-hover:bg-blue-500 group-hover:text-white transition-colors"><Download size={18}/></div>
                             <div className="text-left">
                                 <h4 className="section-title text-text">{t.backup}</h4>
@@ -946,7 +946,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                             </div>
                         </button>
 
-                        <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-surface border border-border/70 hover:border-emerald-500/50 rounded-2xl flex items-center gap-3 group transition-all active:scale-95 shadow-[var(--shadow-soft)]">
+                        <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-[var(--surface)] border border-[color:var(--border)]/50 hover:border-emerald-500/50 rounded-[var(--bento-radius)] flex items-center gap-3 group transition-all active:scale-95 shadow-[var(--shadow-bento)]">
                             <div className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors"><Upload size={18}/></div>
                             <div className="text-left">
                                 <h4 className="section-title text-text">{t.restore}</h4>
@@ -955,7 +955,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                             <input type="file" ref={fileInputRef} className="hidden" accept="application/json" onChange={handleRestore} />
                         </button>
 
-                        <button onClick={onNavigate.bind(null, 'system')} className="w-full p-4 bg-surface-2 hover:bg-surface border border-border/70 rounded-2xl flex items-center gap-3 group transition-all md:col-span-2 active:scale-[0.98] shadow-[var(--shadow-soft)]">
+                        <button onClick={onNavigate.bind(null, 'system')} className="w-full p-4 bg-[var(--surface-2)] hover:bg-[var(--surface)] border border-[color:var(--border)]/50 rounded-[var(--bento-radius)] flex items-center gap-3 group transition-all md:col-span-2 active:scale-[0.98] shadow-[var(--shadow-bento)]">
                              <div className="p-2.5 bg-surface text-text rounded-lg"><Activity size={18}/></div>
                              <div className="text-left">
                                 <h4 className="section-title text-text">System diagnostics</h4>

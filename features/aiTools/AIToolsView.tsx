@@ -15,8 +15,8 @@ const AIToolsView: React.FC = memo(() => {
 
     return (
         <div className="h-full w-full overflow-y-auto custom-scroll flex flex-col px-4 pb-32 pt-[calc(env(safe-area-inset-top)+1.5rem)] md:px-8 md:pt-12 md:pb-40 lg:px-12 animate-fade-in bg-bg relative z-10 overscroll-none">
-            <div className="max-w-6xl mx-auto w-full space-y-10 relative z-10">
-                <Card tone="bento-orange" padding="bento" bento className="bento-card animate-slide-up shadow-[0_30px_120px_-70px_rgba(var(--accent-rgb),0.9)]">
+            <div className="max-w-6xl mx-auto w-full space-y-[var(--bento-gap)] relative z-10">
+                <Card tone="bento-orange" padding="bento" bento className="bento-card animate-slide-up shadow-[var(--shadow-bento)]">
                     <div className="bento-card-content">
                         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                             <div className="space-y-3">
@@ -36,7 +36,7 @@ const AIToolsView: React.FC = memo(() => {
                                 </div>
                             </div>
 
-                            <Card tone="bento-solid-green" padding="sm" bento className="flex items-center gap-3">
+                            <Card tone="bento-solid-green" padding="sm" bento className="flex items-center gap-3 shadow-[var(--shadow-soft)]">
                                 <Badge variant="success">Online</Badge>
                                 <div className="flex items-center gap-2 opacity-90">
                                     <Activity size={14} />
@@ -47,7 +47,7 @@ const AIToolsView: React.FC = memo(() => {
                     </div>
                 </Card>
 
-                <div className="space-y-6 transform-gpu pb-20">
+                <div className="bento-grid grid grid-cols-1 gap-[var(--bento-gap)] transform-gpu pb-20">
                     <GenerativeStudio 
                         isOpen={activeSection === 'GENERATIVE'} 
                         onToggle={() => toggleSection('GENERATIVE')}

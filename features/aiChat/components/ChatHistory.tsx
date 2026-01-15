@@ -230,10 +230,10 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                           <div 
                             onClick={() => { if (!isEditing) { onSelectThread(t.id); if(window.innerWidth < 768) onClose(); } }}
                             className={`
-                              group relative p-3.5 rounded-[16px] border transition-all duration-300 cursor-pointer overflow-hidden
+                              group relative p-3.5 rounded-[var(--radius-md)] border transition-all duration-300 cursor-pointer overflow-hidden
                               ${isActive 
-                                ? 'bg-white dark:bg-white/[0.08] border-accent/40 shadow-lg shadow-accent/5 ring-1 ring-accent/20' 
-                                : 'bg-transparent border-transparent hover:bg-zinc-100 dark:hover:bg-white/[0.03] hover:border-black/5 dark:hover:border-white/5'
+                                ? 'bg-[var(--surface)] border-[color:var(--accent)]/40 shadow-[var(--shadow-bento)] ring-1 ring-[color:var(--accent)]/20' 
+                                : 'bg-transparent border-transparent hover:bg-[var(--surface-2)] hover:border-[color:var(--border)]/30'
                               }
                             `}
                           >
@@ -245,10 +245,10 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                             <div className="flex items-center gap-4 relative z-10">
                               {/* Icon Container */}
                               <div className={`
-                                w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all
+                                w-10 h-10 rounded-[var(--radius-md)] flex items-center justify-center shrink-0 transition-all shadow-[var(--shadow-soft)]
                                 ${isActive 
-                                    ? 'bg-accent text-text-invert shadow-md' 
-                                    : 'bg-surface-2 text-text-muted group-hover:text-text'
+                                    ? 'bg-[var(--accent)] text-[var(--text-invert)]' 
+                                    : 'bg-[var(--surface-2)] text-[var(--text-muted)] group-hover:text-[var(--text)]'
                                 }
                               `}>
                                  <ModelIcon size={18} />

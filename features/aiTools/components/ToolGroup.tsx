@@ -37,9 +37,9 @@ export const ToolGroup: React.FC<ToolGroupProps> = memo(({
         >
             <div className="flex items-start md:items-center gap-5 md:gap-8">
                 <div className={`
-                    w-14 h-14 md:w-20 md:h-20 rounded-[20px] flex items-center justify-center shadow-sm border transition-all duration-500 shrink-0 relative overflow-hidden transform-gpu
-                    ${isOpen ? 'bg-white/20 text-white border-white/30' : 'bg-surface-2 text-text-muted border-border group-hover:text-accent'}
-                    ${isLoading && !isOpen ? 'text-accent' : ''}
+                    w-14 h-14 md:w-20 md:h-20 rounded-[var(--radius-md)] flex items-center justify-center shadow-[var(--shadow-soft)] border transition-all duration-500 shrink-0 relative overflow-hidden transform-gpu
+                    ${isOpen ? 'bg-white/20 text-white border-white/30' : 'bg-[var(--surface-2)] text-[var(--text-muted)] border-[color:var(--border)]/50 group-hover:text-[var(--accent)]'}
+                    ${isLoading && !isOpen ? 'text-[var(--accent)]' : ''}
                 `}>
                     {isLoading 
                         ? <Loader2 size={28} className={`animate-spin relative z-10 ${isOpen ? 'text-white' : ''}`} /> 
@@ -66,7 +66,7 @@ export const ToolGroup: React.FC<ToolGroupProps> = memo(({
                         <ArrowUpRight size={18} className="text-accent" />
                     </div>
                 )}
-                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-500 border ${isOpen ? 'rotate-180 bg-white/20 text-white shadow-[0_0_20px_rgba(255,255,255,0.3)] border-white/30' : 'bg-surface text-text-muted group-hover:text-text border-border'}`}>
+                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-500 border shadow-[var(--shadow-soft)] ${isOpen ? 'rotate-180 bg-white/20 text-white shadow-[var(--shadow-bento)] border-white/30' : 'bg-[var(--surface)] text-[var(--text-muted)] group-hover:text-[var(--text)] border-[color:var(--border)]/50'}`}>
                     <ChevronDown size={20} />
                 </div>
             </div>
