@@ -154,7 +154,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const isHydraActive = activeModel?.id === 'auto-best';
 
     return (
-        <div className="h-full w-full relative bg-noise flex flex-col overflow-hidden bg-[var(--bg)]" style={{ overscrollBehavior: 'contain', position: 'relative' }}>
+        <div className="min-app-dvh w-full relative bg-noise flex flex-col bg-[var(--bg)]" style={{ overscrollBehavior: 'contain', position: 'relative' }}>
             <VaultPinModal isOpen={showPinModal} onClose={() => setShowPinModal(false)} onSuccess={() => setIsVaultSynced(true)} />
             
             <header className="shrink-0 z-50 pt-[calc(max(0.5rem,env(safe-area-inset-top)))] px-4 sm:px-5 md:px-6">
@@ -213,7 +213,7 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
                     </Card>
                 </div>
             </header>
-            <div className="flex-1 min-h-0 relative w-full max-w-[860px] mx-auto px-4 sm:px-5 md:px-6 pt-4">
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scroll relative w-full max-w-[860px] mx-auto px-4 sm:px-5 md:px-6 pt-4">
                 {showEmptyState ? (
                     <div className="flex flex-col h-full justify-center items-center w-full pb-20 animate-fade-in overflow-y-auto custom-scroll px-4 sm:px-6">
                             <div className="text-center mb-12 space-y-5">

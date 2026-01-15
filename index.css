@@ -852,3 +852,247 @@ a {
     scroll-behavior: auto !important;
   }
 }
+
+/* ==================== iOS VIEWPORT FOUNDATION ==================== */
+
+/* iOS Dynamic Viewport Height Utilities */
+.app-dvh {
+  height: 100dvh;
+  height: 100vh; /* Fallback for older browsers */
+}
+
+.min-app-dvh {
+  min-height: 100dvh;
+  min-height: 100vh; /* Fallback */
+}
+
+/* iOS Safe Area Utilities */
+.safe-t {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-b {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-l {
+  padding-left: env(safe-area-inset-left);
+}
+
+.safe-r {
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Overscroll Prevention */
+.overscroll-none {
+  overscroll-behavior: none;
+}
+
+/* iOS Input Zoom Prevention (CRITICAL) */
+/* Ensures all inputs have font-size >= 16px to prevent iOS zoom */
+@media screen and (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+  
+  /* Preserve relative sizing for specific classes */
+  input.text-sm,
+  textarea.text-sm,
+  select.text-sm {
+    font-size: max(16px, 0.875rem) !important;
+  }
+  
+  input.text-xs,
+  textarea.text-xs,
+  select.text-xs {
+    font-size: 16px !important; /* Force 16px even for xs */
+  }
+}
+
+/* ==================== SCROLL ARCHITECTURE ==================== */
+
+/* Ensure html/body don't create double scroll */
+html {
+  height: 100%;
+  overflow: hidden; /* Prevent body scroll */
+}
+
+body {
+  height: 100%;
+  overflow: hidden; /* Single scroll container per view */
+}
+
+#root {
+  min-height: 100dvh;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Custom Scrollbar (Professional) */
+.custom-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+/* ==================== MODAL/DIALOG iOS FIXES ==================== */
+
+/* Modal Container Safe Height */
+.modal-container {
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);
+  max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);
+}
+
+/* Modal Content Scrollable */
+.modal-content {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Modal Footer Sticky */
+.modal-footer {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+/* Reduce backdrop-filter on mobile (performance) */
+@media (max-width: 768px) {
+  .backdrop-blur-xl {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  
+  .backdrop-blur-2xl {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+
+/* ==================== KEYBOARD OFFSET SUPPORT ==================== */
+
+/* CSS Variable for keyboard offset (set by JS) */
+:root {
+  --keyboard-offset: 0px;
+}
+
+/* Apply keyboard offset to bottom elements */
+.with-keyboard-offset {
+  padding-bottom: calc(env(safe-area-inset-bottom) + var(--keyboard-offset));
+}
+
+/* ==================== PERFORMANCE OPTIMIZATIONS ==================== */
+
+/* GPU Acceleration for transforms */
+.transform-gpu {
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+}
+
+/* Will-change hints (use sparingly) */
+.will-change-transform {
+  will-change: transform;
+}
+
+.will-change-scroll {
+  will-change: scroll-position;
+}
+
+/* ==================== TOUCH IMPROVEMENTS ==================== */
+
+/* Remove tap highlight on iOS */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Touch action optimization */
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* Prevent text selection during drag */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+/* ==================== ACCESSIBILITY ==================== */
+
+/* Ensure minimum touch target size */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Focus visible for keyboard users */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/* ==================== REDUCED MOTION ==================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+  /* ==================== MINIMAL iOS HELPERS ==================== */
+  /* dvh utilities */
+  .app-dvh {
+    height: 100dvh;
+    height: 100vh;
+  }
+  .min-app-dvh {
+    min-height: 100dvh;
+    min-height: 100vh;
+  }
+  /* safe-area utilities */
+  .safe-t {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-b {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* iOS input zoom prevention */
+  input, textarea, select {
+    font-size: 16px;
+  }

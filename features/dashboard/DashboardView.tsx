@@ -159,83 +159,98 @@ const DashboardView: React.FC<DashboardProps> = ({ onNavigate, notes, userName =
     return (
         <div className="h-full w-full overflow-y-auto flex flex-col px-4 pt-safe pb-safe md:px-8 lg:px-10 animate-fade-in relative z-10">
             <VaultPinModal isOpen={showPinModal} onClose={() => setShowPinModal(false)} onConfirm={unlockVault} />
-            <div className="w-full max-w-6xl mx-auto space-y-8 py-6 md:py-8">
-                <header className="space-y-6">
-                    <Card padding="lg" className="border-border/40 bg-gradient-to-br from-surface to-surface-2">
-                        <div className="space-y-4">
-                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                                <div className="space-y-2">
-                                    <h1 className="text-3xl md:text-4xl font-black tracking-tight text-text">Dashboard</h1>
-                                    <p className="body-sm text-text-muted">Polos, bersih, fokus pada tindakan cepat.</p>
-                                </div>
-                                <div className="relative" ref={accountMenuRef}>
-                                    <button onClick={() => setIsAccountOpen(!isAccountOpen)} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-2 transition-colors" aria-label="Account menu">
-                                        <div className="w-8 h-8 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-text-muted text-sm font-semibold">
-                                            {userName.charAt(0).toUpperCase()}
+            <div className="w-full max-w-7xl mx-auto py-6 md:py-10">
+                {/* Header */}
+                <header className="mb-8">
+                    <Card padding="lg" className="border-border/40 bg-gradient-to-br from-surface to-surface-2 rounded-[28px]">
+                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+                            <div className="space-y-2">
+                                <h1 className="text-3xl md:text-4xl font-black tracking-tight text-text">Dashboard</h1>
+                                <p className="body-sm text-text-muted">Polos, bersih, fokus pada tindakan cepat.</p>
+                            </div>
+                            <div className="relative" ref={accountMenuRef}>
+                                <button onClick={() => setIsAccountOpen(!isAccountOpen)} className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-surface-2 transition-colors" aria-label="Account menu">
+                                    <div className="w-9 h-9 rounded-xl bg-surface-2 border border-border flex items-center justify-center text-text-muted text-base font-semibold">
+                                        {userName.charAt(0).toUpperCase()}
+                                    </div>
+                                    <ChevronDown size={18} className={`text-text-muted transition-transform ${isAccountOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {isAccountOpen && (
+                                    <Card padding="sm" className="absolute top-full right-0 mt-2 w-48 border-border/60 shadow-[var(--shadow-soft)] z-20 rounded-[20px]"> 
+                                        <div className="space-y-1">
+                                            <Button variant="ghost" size="sm" className="w-full justify-start text-text-muted hover:text-text" role="menuitem">{t.profile}</Button>
+                                            {onLogout && (
+                                                <Button variant="ghost" size="sm" className="w-full justify-start text-danger hover:bg-danger/10" onClick={() => { setIsAccountOpen(false); onLogout(); }} role="menuitem">{t.logout}</Button>
+                                            )}
                                         </div>
-                                        <ChevronDown size={16} className={`text-text-muted transition-transform ${isAccountOpen ? 'rotate-180' : ''}`} />
-                                    </button>
-                                    {isAccountOpen && (
-                                        <Card padding="sm" className="absolute top-full right-0 mt-2 w-48 border-border/60 shadow-[var(--shadow-soft)] z-20"> 
-                                            <div className="space-y-1">
-                                                <Button variant="ghost" size="sm" className="w-full justify-start text-text-muted hover:text-text" role="menuitem">{t.profile}</Button>
-                                                {onLogout && (
-                                                    <Button variant="ghost" size="sm" className="w-full justify-start text-danger hover:bg-danger/10" onClick={() => { setIsAccountOpen(false); onLogout(); }} role="menuitem">{t.logout}</Button>
-                                                )}
-                                            </div>
-                                        </Card>
-                                    )}
-                                </div>
+                                    </Card>
+                                )}
                             </div>
                         </div>
                     </Card>
                 </header>
-                <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <StatCard label={t.nodes} value={notes.length.toString().padStart(2, '0')} icon={<FileText />} onClick={handleNavNotes} />
-                    <StatCard label={t.focus} value={`${syncLevel}%`} helper={isReady ? t.ready : t.syncing} icon={<Activity />} onClick={handleNavSystem} />
-                    <StatCard label={t.vault} value={isVaultUnlocked ? t.vaultUnlocked : t.vaultLocked} helper={vaultEnabled ? t.control : t.vaultDisabled} icon={isVaultUnlocked ? <Unlock /> : <Lock />} onClick={vaultEnabled ? handleToggleVault : undefined} />
-                </section>
-                <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
-                    <div className="md:col-span-2 lg:col-span-8">
+                {/* Editorial Bento Grid */}
+                <section className="grid grid-cols-12 gap-5 auto-rows-auto">
+                    {/* Hero Card: Daily Stoic */}
+                    <div className="col-span-12 md:col-span-8 row-span-2">
                         <DailyStoicWidget />
                     </div>
-                    <FeatureCard title={t.chatTitle} desc={t.chatDesc} icon={<Brain />} onClick={handleNavChat} className="md:col-span-1 lg:col-span-4 min-h-[220px]" delay={100} />
-                    <FeatureCard title={t.archiveTitle} desc={t.archiveDesc} icon={<Database />} onClick={handleNavArchive} className="md:col-span-1 lg:col-span-4 min-h-[220px]" delay={200} />
-                    <FeatureCard title={t.toolsTitle} desc={t.toolsDesc} icon={<Zap />} onClick={handleNavTools} className="md:col-span-2 lg:col-span-8 min-h-[220px]" delay={300} />
-                    <Card padding="lg" className="md:col-span-2 lg:col-span-8 animate-slide-up border-border/60 shadow-[var(--shadow-soft)]" style={{ animationDelay: '400ms' }}>
-                        <div className="flex items-center justify-between border-b border-border pb-4 mb-4">
-                            <h3 className="section-title text-text">{t.recent}</h3>
-                            <Button variant="secondary" size="sm" onClick={handleNavNotes}>{t.viewAll}</Button>
-                        </div>
-                        <div className="space-y-3">
-                            {recentNotes.map((note) => (
-                                <button key={note.id || `note-${note.title}`} onClick={() => onNavigate('notes')} className="w-full p-3 rounded-lg bg-surface-2 hover:bg-surface transition-colors text-left group" aria-label={`Open note: ${note.title || t.untitled}`}> 
-                                    <p className="section-title text-text group-hover:text-accent transition-colors">{note.title || t.untitled}</p>
-                                    <p className="caption text-text-muted mt-1">{formatDate(note.createdAt)}</p>
-                                </button>
-                            ))}
-                            {recentNotes.length === 0 && (
-                                <p className="caption text-text-muted text-center py-6">{t.recentEmpty}</p>
-                            )}
-                        </div>
-                    </Card>
-                    <Card padding="lg" className="md:col-span-2 lg:col-span-4 animate-slide-up border-border/60 shadow-[var(--shadow-soft)]" style={{ animationDelay: '500ms' }}>
-                        <div className="flex items-start justify-between gap-4 mb-4">
-                            <div className="w-12 h-12 rounded-[var(--radius-md)] bg-surface-2 border border-border flex items-center justify-center text-text-muted">
-                                <DatabaseZap size={22} strokeWidth={1.7} />
+                    {/* Stat Cards: Editorial, not boxy */}
+                    <div className="col-span-6 md:col-span-4 flex flex-col gap-5">
+                        <StatCard label={t.nodes} value={notes.length.toString().padStart(2, '0')} icon={<FileText />} onClick={handleNavNotes} />
+                        <StatCard label={t.focus} value={`${syncLevel}%`} helper={isReady ? t.ready : t.syncing} icon={<Activity />} onClick={handleNavSystem} />
+                        <StatCard label={t.vault} value={isVaultUnlocked ? t.vaultUnlocked : t.vaultLocked} helper={vaultEnabled ? t.control : t.vaultDisabled} icon={isVaultUnlocked ? <Unlock /> : <Lock />} onClick={vaultEnabled ? handleToggleVault : undefined} />
+                    </div>
+                    {/* Feature Cards: Bento style */}
+                    <div className="col-span-12 md:col-span-6 lg:col-span-4">
+                        <FeatureCard title={t.chatTitle} desc={t.chatDesc} icon={<Brain />} onClick={handleNavChat} className="min-h-[180px] rounded-[24px]" delay={100} />
+                    </div>
+                    <div className="col-span-12 md:col-span-6 lg:col-span-4">
+                        <FeatureCard title={t.archiveTitle} desc={t.archiveDesc} icon={<Database />} onClick={handleNavArchive} className="min-h-[180px] rounded-[24px]" delay={200} />
+                    </div>
+                    <div className="col-span-12 lg:col-span-4">
+                        <FeatureCard title={t.toolsTitle} desc={t.toolsDesc} icon={<Zap />} onClick={handleNavTools} className="min-h-[180px] rounded-[24px]" delay={300} />
+                    </div>
+                    {/* Recent Notes: Editorial card */}
+                    <div className="col-span-12 md:col-span-8">
+                        <Card padding="lg" className="animate-slide-up border-border/60 shadow-[var(--shadow-soft)] rounded-[24px]" style={{ animationDelay: '400ms' }}>
+                            <div className="flex items-center justify-between border-b border-border pb-4 mb-4">
+                                <h3 className="section-title text-text">{t.recent}</h3>
+                                <Button variant="secondary" size="sm" onClick={handleNavNotes}>{t.viewAll}</Button>
                             </div>
-                            <Badge variant={isVaultUnlocked ? 'success' : 'neutral'}> {isVaultUnlocked ? t.vaultUnlocked : t.vaultLocked} </Badge>
-                        </div>
-                        <div className="space-y-3">
-                            <div>
-                                <h3 className="section-title text-text">{t.control}</h3>
-                                <p className="caption text-text-muted mt-1"> {isVaultUnlocked ? t.vaultDescUnlocked : t.vaultDescLocked} </p>
+                            <div className="space-y-3">
+                                {recentNotes.map((note) => (
+                                    <button key={note.id || `note-${note.title}`} onClick={() => onNavigate('notes')} className="w-full p-3 rounded-xl bg-surface-2 hover:bg-surface transition-colors text-left group" aria-label={`Open note: ${note.title || t.untitled}`}> 
+                                        <p className="section-title text-text group-hover:text-accent transition-colors">{note.title || t.untitled}</p>
+                                        <p className="caption text-text-muted mt-1">{formatDate(note.createdAt)}</p>
+                                    </button>
+                                ))}
+                                {recentNotes.length === 0 && (
+                                    <p className="caption text-text-muted text-center py-6">{t.recentEmpty}</p>
+                                )}
                             </div>
-                        </div>
-                        <Button onClick={vaultEnabled ? handleToggleVault : handleNavTools} variant={!vaultEnabled ? 'secondary' : isVaultUnlocked ? 'destructive' : 'primary'} size="lg" className={cn('mt-6 w-full', !vaultEnabled ? 'opacity-70' : '')} aria-label={!vaultEnabled ? t.vaultDisabled : isVaultUnlocked ? t.vaultLock : t.vaultUnlock}>
-                            {isVaultUnlocked ? <Lock size={16} /> : <Unlock size={16} />} {!vaultEnabled ? t.vaultDisabled : isVaultUnlocked ? t.vaultLock : t.vaultUnlock}
-                        </Button>
-                    </Card>
+                        </Card>
+                    </div>
+                    {/* Vault Control Card: Editorial */}
+                    <div className="col-span-12 md:col-span-4">
+                        <Card padding="lg" className="animate-slide-up border-border/60 shadow-[var(--shadow-soft)] rounded-[24px]" style={{ animationDelay: '500ms' }}>
+                            <div className="flex items-start justify-between gap-4 mb-4">
+                                <div className="w-12 h-12 rounded-[var(--radius-xl)] bg-surface-2 border border-border flex items-center justify-center text-text-muted">
+                                    <DatabaseZap size={22} strokeWidth={1.7} />
+                                </div>
+                                <Badge variant={isVaultUnlocked ? 'success' : 'neutral'}> {isVaultUnlocked ? t.vaultUnlocked : t.vaultLocked} </Badge>
+                            </div>
+                            <div className="space-y-3">
+                                <div>
+                                    <h3 className="section-title text-text">{t.control}</h3>
+                                    <p className="caption text-text-muted mt-1"> {isVaultUnlocked ? t.vaultDescUnlocked : t.vaultDescLocked} </p>
+                                </div>
+                            </div>
+                            <Button onClick={vaultEnabled ? handleToggleVault : handleNavTools} variant={!vaultEnabled ? 'secondary' : isVaultUnlocked ? 'destructive' : 'primary'} size="lg" className={cn('mt-6 w-full', !vaultEnabled ? 'opacity-70' : '')} aria-label={!vaultEnabled ? t.vaultDisabled : isVaultUnlocked ? t.vaultLock : t.vaultUnlock}>
+                                {isVaultUnlocked ? <Lock size={16} /> : <Unlock size={16} />} {!vaultEnabled ? t.vaultDisabled : isVaultUnlocked ? t.vaultLock : t.vaultUnlock}
+                            </Button>
+                        </Card>
+                    </div>
                 </section>
             </div>
         </div>
