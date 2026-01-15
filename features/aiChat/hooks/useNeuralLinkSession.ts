@@ -37,6 +37,7 @@ export const useNeuralLinkSession = (personaMode: 'hanisah' | 'stoic', notes: No
                     persona: personaMode,
                     systemInstruction,
                     voiceName: voice,
+                    engine: 'GEMINI_REALTIME',
                     onStatusChange: (status, error) => {
                         setLiveStatus(status);
                         if (status === 'ERROR') setIsLiveMode(false);

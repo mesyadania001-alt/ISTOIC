@@ -239,7 +239,7 @@ const AppContent: React.FC<AppContentProps> = ({ notes, setNotes, isDebugOpen, s
   };
 
   return (
-    <div className="flex h-[100dvh] w-full text-skin-text font-sans bg-skin-main theme-transition overflow-hidden selection:bg-accent/30 selection:text-accent relative">
+    <div className="flex h-[100dvh] h-screen w-full text-skin-text font-sans bg-skin-main theme-transition overflow-hidden selection:bg-accent/30 selection:text-accent relative safe-t safe-b safe-l safe-r">
       
       {/* 1. Global Ambient Background Layer */}
       <div className="absolute inset-0 pointer-events-none z-0 transform-gpu">
@@ -290,12 +290,13 @@ const AppContent: React.FC<AppContentProps> = ({ notes, setNotes, isDebugOpen, s
 
 type SessionMode = 'AUTH' | 'SELECT' | 'ISTOIC' | 'ISTOK' | 'TELEPONAN';
 
-const App: React.FC = () => {
+const App: React.FC = (): React.ReactElement => {
     const [isDebugOpen, setIsDebugOpen] = useState(false);
     const [notes, setNotes] = useIDB<Note[]>('notes', []);
     const [sessionMode, setSessionMode] = useState<SessionMode>('AUTH');
     const [identity, setIdentity] = useLocalStorage<IStokUserIdentity | null>('istok_user_identity', null);
     const returnToRef = useRef<SessionMode | null>(null);
+    const [isTransitioning, setIsTransitioning] = useState(false);
     
     useIndexedDBSync(notes);
     const { peer, incomingConnection, clearIncoming } = useGlobalPeer(identity);
@@ -363,14 +364,28 @@ const App: React.FC = () => {
     }, [identity, sessionMode]);
 
     const handleAuthSuccess = useCallback(() => {
-        const target = returnToRef.current;
-        returnToRef.current = null;
-        setSessionMode(target && target !== 'AUTH' ? target : 'SELECT');
+        setIsTransitioning(true);
+        // Brief delay for auth card exit animation
+        setTimeout(() => {
+            const target = returnToRef.current;
+            returnToRef.current = null;
+            setSessionMode(target && target !== 'AUTH' ? target : 'SELECT');
+            setIsTransitioning(false);
+        }, 180); // Match the exit animation duration
     }, []);
 
     const handleSelectMode = useCallback((mode: SessionMode) => {
-        returnToRef.current = null;
-        setSessionMode(mode);
+        if (mode === 'ISTOIC') {
+            setIsTransitioning(true);
+            setTimeout(() => {
+                returnToRef.current = null;
+                setSessionMode(mode);
+                setIsTransitioning(false);
+            }, 150);
+        } else {
+            returnToRef.current = null;
+            setSessionMode(mode);
+        }
     }, []);
 
     const handleLogout = useCallback(() => {
@@ -386,7 +401,9 @@ const App: React.FC = () => {
     // ANDROID BACK BUTTON HANDLER (Capacitor)
     useEffect(() => {
         if (!Capacitor.isNativePlatform()) return;
-        const backHandler = CapApp.addListener('backButton', ({ canGoBack }) => {
+        let listenerHandle: any = null;
+        let isMounted = true;
+        CapApp.addListener('backButton', ({ canGoBack }) => {
             if (isDebugOpen) {
                 setIsDebugOpen(false);
                 return;
@@ -395,8 +412,12 @@ const App: React.FC = () => {
                 clearIncoming();
                 return;
             }
-            if (sessionMode === 'ISTOK' || sessionMode === 'TELEPONAN') {
-                setSessionMode('ISTOIC');
+            if (sessionMode === 'TELEPONAN') {
+                setSessionMode('ISTOK');
+                return;
+            }
+            if (sessionMode === 'ISTOK') {
+                setSessionMode('SELECT');
                 return;
             }
             if (sessionMode === 'ISTOIC') {
@@ -406,32 +427,55 @@ const App: React.FC = () => {
                     setSessionMode('SELECT');
                 }
             }
+        }).then(handle => {
+            if (isMounted) {
+                listenerHandle = handle;
+            } else {
+                handle.remove();
+            }
         });
         return () => {
-            backHandler.remove();
+            isMounted = false;
+            if (listenerHandle) {
+                listenerHandle.remove();
+            }
         };
     }, [sessionMode, isDebugOpen, incomingConnection, clearIncoming]);
     
-    const renderSession = () => {
+    const renderSession = (): React.ReactElement => {
         if (sessionMode === 'AUTH') {
-            return <ErrorBoundary viewName="AUTH_SHELL"><AuthView onAuthSuccess={handleAuthSuccess} /></ErrorBoundary>;
+            return (
+                <div className={`fixed inset-0 z-[9999] ${isTransitioning ? 'animate-auth-exit' : ''}`}>
+                    <ErrorBoundary viewName="AUTH_SHELL">
+                        <AuthView onAuthSuccess={handleAuthSuccess} />
+                    </ErrorBoundary>
+                </div>
+            );
         }
         if (sessionMode === 'SELECT') {
-            return <ErrorBoundary viewName="SELECTOR"><AppSelector onSelect={handleSelectMode} /></ErrorBoundary>;
+            return (
+                <div className={`fixed inset-0 z-[9999] ${isTransitioning ? 'animate-auth-exit' : 'animate-dashboard-enter'}`}>
+                    <ErrorBoundary viewName="SELECTOR">
+                        <AppSelector onSelect={handleSelectMode} />
+                    </ErrorBoundary>
+                </div>
+            );
         }
         if (sessionMode === 'ISTOK') {
             return (
-                <Suspense
-                    fallback={
-                        <div className="h-screen w-screen bg-bg flex items-center justify-center text-text-muted">
-                            Preparing secure session...
-                        </div>
-                    }
-                >
-                    <ErrorBoundary viewName="ISTOK_SECURE_CHANNEL">
-                        <IStokView onLogout={() => setSessionMode('AUTH')} globalPeer={peer} initialAcceptedConnection={acceptedConnection} />
-                    </ErrorBoundary>
-                </Suspense>
+                <div className={`fixed inset-0 z-[9999] ${isTransitioning ? 'animate-dashboard-enter' : ''}`}>
+                    <Suspense
+                        fallback={
+                            <div className="h-screen w-screen bg-bg flex items-center justify-center text-text-muted">
+                                Preparing secure session...
+                            </div>
+                        }
+                    >
+                        <ErrorBoundary viewName="ISTOK_SECURE_CHANNEL">
+                            <IStokView onLogout={() => setSessionMode('AUTH')} globalPeer={peer} initialAcceptedConnection={acceptedConnection} />
+                        </ErrorBoundary>
+                    </Suspense>
+                </div>
             );
         }
         if (sessionMode === 'TELEPONAN') {
@@ -444,33 +488,62 @@ const App: React.FC = () => {
                     }
                 >
                     <ErrorBoundary viewName="TELEPONAN_SECURE_CALL">
-                        <TeleponanView onClose={() => setSessionMode('ISTOIC')} />
+                        <TeleponanView onClose={() => setSessionMode('ISTOK')} />
                     </ErrorBoundary>
                 </Suspense>
             );
         }
+        if (sessionMode === 'ISTOIC') {
+            return (
+                <div className={`absolute inset-0 z-[9999] ${isTransitioning ? 'animate-dashboard-enter' : ''}`}>
+                    <GenerativeSessionProvider>
+                        <LiveSessionProvider notes={notes} setNotes={setNotes}>
+                            {incomingConnection && (
+                                <ConnectionNotification 
+                                    identity={requestIdentity}
+                                    peerId={incomingConnection.conn.peer}
+                                    onAccept={() => handleAcceptConnection(incomingConnection)}
+                                    onDecline={() => { incomingConnection.conn.close(); clearIncoming(); }}
+                                    isProcessing={!incomingConnection.firstData} 
+                                />
+                            )}
+                            <AppContent 
+                                notes={notes} 
+                                setNotes={setNotes} 
+                                isDebugOpen={isDebugOpen} 
+                                setIsDebugOpen={setIsDebugOpen} 
+                                userName={identity?.displayName || identity?.codename || 'Account'}
+                                onLogout={handleLogout}
+                            />
+                        </LiveSessionProvider>
+                    </GenerativeSessionProvider>
+                </div>
+            );
+        }
         return (
-            <GenerativeSessionProvider>
-                <LiveSessionProvider notes={notes} setNotes={setNotes}>
-                    {incomingConnection && (
-                        <ConnectionNotification 
-                            identity={requestIdentity}
-                            peerId={incomingConnection.conn.peer}
-                            onAccept={() => handleAcceptConnection(incomingConnection)}
-                            onDecline={() => { incomingConnection.conn.close(); clearIncoming(); }}
-                            isProcessing={!incomingConnection.firstData} 
+            <div className={`absolute inset-0 z-[9999] ${isTransitioning ? 'animate-dashboard-enter' : ''}`}>
+                <GenerativeSessionProvider>
+                    <LiveSessionProvider notes={notes} setNotes={setNotes}>
+                        {incomingConnection && (
+                            <ConnectionNotification 
+                                identity={requestIdentity}
+                                peerId={incomingConnection.conn.peer}
+                                onAccept={() => handleAcceptConnection(incomingConnection)}
+                                onDecline={() => { incomingConnection.conn.close(); clearIncoming(); }}
+                                isProcessing={!incomingConnection.firstData} 
+                            />
+                        )}
+                        <AppContent 
+                            notes={notes} 
+                            setNotes={setNotes} 
+                            isDebugOpen={isDebugOpen} 
+                            setIsDebugOpen={setIsDebugOpen} 
+                            userName={identity?.displayName || identity?.codename || 'Account'}
+                            onLogout={handleLogout}
                         />
-                    )}
-                    <AppContent 
-                        notes={notes} 
-                        setNotes={setNotes} 
-                        isDebugOpen={isDebugOpen} 
-                        setIsDebugOpen={setIsDebugOpen} 
-                        userName={identity?.displayName || identity?.codename || 'Account'}
-                        onLogout={handleLogout}
-                    />
-                </LiveSessionProvider>
-            </GenerativeSessionProvider>
+                    </LiveSessionProvider>
+                </GenerativeSessionProvider>
+            </div>
         );
     };
 

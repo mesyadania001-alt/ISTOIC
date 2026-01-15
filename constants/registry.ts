@@ -47,6 +47,9 @@ export const UI_REGISTRY = {
     NOTES_INPUT_SEARCH: 'UI_NOTES_INPUT_SEARCH',
     NOTES_BTN_FILTER_ARCHIVE: 'UI_NOTES_BTN_FILTER_ARCHIVE',
     NOTES_BTN_BATCH_MODE: 'UI_NOTES_BTN_BATCH_MODE',
+    NOTES_BTN_AGENT_CONSOLE: 'UI_NOTES_BTN_AGENT_CONSOLE',
+    NOTES_BTN_PIN_ITEM: 'UI_NOTES_BTN_PIN_ITEM',
+    NOTES_BTN_ARCHIVE_ITEM: 'UI_NOTES_BTN_ARCHIVE_ITEM',
     NOTES_CARD_ITEM: 'UI_NOTES_CARD_ITEM',
     NOTES_BTN_DELETE_ITEM: 'UI_NOTES_BTN_DELETE_ITEM',
     
@@ -181,6 +184,9 @@ export const COMPLETE_UI_MAP: Record<UI_ID, UIMetadata> = {
     [UI_REGISTRY.NOTES_INPUT_SEARCH]: { label: 'Search Notes', event: 'TYPE', fn: FN_REGISTRY.NOTE_SEARCH, desc: 'Filter Notes' },
     [UI_REGISTRY.NOTES_BTN_FILTER_ARCHIVE]: { label: 'Filter Archive', event: 'CLICK', fn: FN_REGISTRY.NOTE_SEARCH, desc: 'Toggle Archive View' },
     [UI_REGISTRY.NOTES_BTN_BATCH_MODE]: { label: 'Batch Mode', event: 'CLICK', fn: FN_REGISTRY.NOTE_BATCH_ACTION, desc: 'Toggle Batch Selection' },
+    [UI_REGISTRY.NOTES_BTN_AGENT_CONSOLE]: { label: 'Agent Console', event: 'CLICK', fn: FN_REGISTRY.NOTE_BATCH_ACTION, desc: 'Open AI Agent Console' },
+    [UI_REGISTRY.NOTES_BTN_PIN_ITEM]: { label: 'Pin Note', event: 'CLICK', fn: FN_REGISTRY.NOTE_UPDATE, desc: 'Pin/Unpin Note' },
+    [UI_REGISTRY.NOTES_BTN_ARCHIVE_ITEM]: { label: 'Archive Note', event: 'CLICK', fn: FN_REGISTRY.NOTE_UPDATE, desc: 'Archive/Unarchive Note' },
     [UI_REGISTRY.NOTES_CARD_ITEM]: { label: 'Open Note', event: 'CLICK', fn: FN_REGISTRY.NOTE_UPDATE, desc: 'Open Note Editor' },
     [UI_REGISTRY.NOTES_BTN_DELETE_ITEM]: { label: 'Delete Note', event: 'CLICK', fn: FN_REGISTRY.NOTE_DELETE, desc: 'Delete Single Note' },
 

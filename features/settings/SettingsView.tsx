@@ -5,7 +5,8 @@ import {
     User, UserCheck, Database, Palette, Globe, Shield, 
     X, Check, LogOut, ChevronRight, Moon, Sun, Monitor,
     Save, RefreshCw, Cpu, Zap, Wifi, Activity, Layers, Download, Upload,
-    Fingerprint, Lock, Key, Brain, Mic, Terminal, Sparkles, Server, ToggleLeft, ToggleRight, Edit3, CheckCircle2
+    Fingerprint, Lock, Key, Brain, Mic, Terminal, Sparkles, Server, ToggleLeft, ToggleRight, Edit3, CheckCircle2,
+    KeyRound
 } from 'lucide-react';
 import { TRANSLATIONS, getLang } from '../../services/i18n';
 import { IstokIdentityService } from '../istok/services/istokIdentity';
@@ -24,6 +25,20 @@ import { Input, Textarea } from '../../components/ui/Input';
 import { Dialog } from '../../components/ui/Dialog';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
+import { FormField } from '../../components/ui/FormField';
+import { authStyles } from '../auth/authStyles';
+import { auth } from '../../services/firebaseConfig';
+import { 
+    updatePassword, 
+    reauthenticateWithCredential, 
+    EmailAuthProvider, 
+    sendPasswordResetEmail 
+} from 'firebase/auth';
+import { 
+    isSystemPinConfigured, 
+    setSystemPin, 
+    verifySystemPin 
+} from '../../utils/crypto';
 
 interface SettingsViewProps {
     onNavigate: (feature: FeatureID) => void;
@@ -46,21 +61,21 @@ const THEME_COLORS: Record<string, string> = {
 // --- OPTIMIZED SUB-COMPONENTS (Memoized) ---
 
 const SettingsSection: React.FC<{ title: string, icon: React.ReactNode, children: React.ReactNode, className?: string }> = memo(({ title, icon, children, className }) => (
-    <Card padding="lg" className={`space-y-4 border-border/60 shadow-[var(--shadow-soft)] ${className || ''}`}>
-        <div className="flex items-center gap-2 text-text-muted">
+    <div className={`space-y-4 ${className || ''}`}>
+        <div className="flex items-center gap-2 opacity-80">
             {React.cloneElement(icon as React.ReactElement<any>, { size: 16 })}
-            <h3 className="overline text-text-muted">{title}</h3>
+            <h3 className="bento-card-title text-lg">{title}</h3>
         </div>
         <div className="space-y-3">
             {children}
         </div>
-    </Card>
+    </div>
 ));
 
 const ToolRow: React.FC<{ label: string, desc: string, icon: React.ReactNode, isActive: boolean, onToggle: () => void }> = memo(({ label, desc, icon, isActive, onToggle }) => (
     <button 
         onClick={onToggle}
-        className={`w-full flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-border/70 shadow-[var(--shadow-soft)] transition-all active:scale-[0.98] hover:-translate-y-0.5 ${isActive ? 'bg-surface ring-1 ring-accent/20' : 'bg-surface-2'}`}
+        className={`w-full flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-[color:var(--border)]/50 shadow-[var(--shadow-bento)] transition-all active:scale-[0.98] hover:-translate-y-0.5 ${isActive ? 'bg-[var(--surface)] ring-1 ring-[color:var(--accent)]/20' : 'bg-[var(--surface-2)]'}`}
     >
         <div className="flex items-center gap-3">
             <div className={`p-2 rounded-lg border ${isActive ? 'bg-accent/10 text-accent border-accent/40' : 'bg-surface text-text-muted border-border/60'}`}>
@@ -177,6 +192,22 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
     const [idUpdateMsg, setIdUpdateMsg] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     
+    // Password Change State
+    const [showChangePassword, setShowChangePassword] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordError, setPasswordError] = useState('');
+    const [passwordSuccess, setPasswordSuccess] = useState('');
+    
+    // PIN Change State
+    const [showChangePin, setShowChangePin] = useState(false);
+    const [currentPin, setCurrentPin] = useState('');
+    const [newPin, setNewPin] = useState('');
+    const [confirmPin, setConfirmPin] = useState('');
+    const [pinError, setPinError] = useState('');
+    const [pinSuccess, setPinSuccess] = useState('');
+    
     // Derived
     const currentLang = getLang();
     const t = TRANSLATIONS[currentLang].settings;
@@ -289,6 +320,137 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
         setProviderVisibility(prev => ({ ...prev, [id]: !prev[id] }));
     }, [setProviderVisibility]);
 
+    const handleChangePassword = useCallback(async () => {
+        if (!auth || !auth.currentUser || !auth.currentUser.email) {
+            setPasswordError('User not authenticated.');
+            return;
+        }
+
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            setPasswordError('All fields are required.');
+            return;
+        }
+
+        if (newPassword.length < 8) {
+            setPasswordError('Password must be at least 8 characters.');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            setPasswordError('New passwords do not match.');
+            return;
+        }
+
+        setPasswordError('');
+        setPasswordSuccess('');
+        setIsSaving(true);
+
+        try {
+            const user = auth.currentUser;
+            if (!user || !user.email) {
+                setPasswordError('User not authenticated.');
+                return;
+            }
+
+            // Re-authenticate user
+            const credential = EmailAuthProvider.credential(user.email, currentPassword);
+            await reauthenticateWithCredential(user, credential);
+            
+            // Update password
+            await updatePassword(user, newPassword);
+            
+            // Send confirmation email
+            try {
+                await sendPasswordResetEmail(auth, user.email, {
+                    url: window.location.origin,
+                    handleCodeInApp: false,
+                });
+            } catch (e) {
+                console.warn('Failed to send confirmation email', e);
+            }
+            
+            setPasswordSuccess('Password changed successfully. Confirmation email sent.');
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+            setTimeout(() => {
+                setShowChangePassword(false);
+                setPasswordSuccess('');
+            }, 2000);
+        } catch (e: any) {
+            const errorMsg = e?.message || 'Failed to change password.';
+            if (errorMsg.includes('wrong-password') || errorMsg.includes('invalid-credential')) {
+                setPasswordError('Current password is incorrect.');
+            } else {
+                setPasswordError(errorMsg);
+            }
+        } finally {
+            setIsSaving(false);
+        }
+    }, [currentPassword, newPassword, confirmPassword]);
+
+    const handleChangePin = useCallback(async () => {
+        if (!isSystemPinConfigured()) {
+            setPinError('PIN not configured. Please set up PIN first.');
+            return;
+        }
+
+        if (!currentPin || !newPin || !confirmPin) {
+            setPinError('All fields are required.');
+            return;
+        }
+
+        if (newPin.length < 4) {
+            setPinError('PIN must be at least 4 digits.');
+            return;
+        }
+
+        if (newPin !== confirmPin) {
+            setPinError('New PINs do not match.');
+            return;
+        }
+
+        // Verify current PIN
+        const isValid = await verifySystemPin(currentPin);
+        if (!isValid) {
+            setPinError('Current PIN is incorrect.');
+            return;
+        }
+
+        setPinError('');
+        setPinSuccess('');
+        setIsSaving(true);
+
+        try {
+            await setSystemPin(newPin);
+            setPinSuccess('PIN changed successfully.');
+            setCurrentPin('');
+            setNewPin('');
+            setConfirmPin('');
+            
+            // Send email notification if user has email
+            if (auth && auth.currentUser && auth.currentUser.email) {
+                try {
+                    await sendPasswordResetEmail(auth, auth.currentUser.email, {
+                        url: window.location.origin,
+                        handleCodeInApp: false,
+                    });
+                } catch (e) {
+                    console.warn('Failed to send PIN change notification email', e);
+                }
+            }
+            
+            setTimeout(() => {
+                setShowChangePin(false);
+                setPinSuccess('');
+            }, 2000);
+        } catch (e: any) {
+            setPinError(e?.message || 'Failed to change PIN.');
+        } finally {
+            setIsSaving(false);
+        }
+    }, [currentPin, newPin, confirmPin]);
+
     return (
         <div className="h-full flex flex-col px-4 pt-[calc(env(safe-area-inset-top)+1.5rem)] md:px-8 md:pt-12 lg:px-12 overflow-hidden font-sans animate-fade-in text-text relative">
             
@@ -301,53 +463,59 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                 onReset={() => handleResetPrompt(editPersona)}
             />
 
-            <Card tone="translucent" padding="lg" className="mb-6 border-border/60 shadow-[0_30px_120px_-70px_rgba(var(--accent-rgb),0.9)]">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="w-full space-y-3">
-                        <p className="caption text-text-muted uppercase tracking-[0.2em]">Control Center</p>
-                        <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-2xl bg-[color:var(--accent)]/12 text-[color:var(--accent)] flex items-center justify-center">
-                                <User size={20} />
+            <Card tone="bento-blue" padding="bento" bento className="bento-card mb-6 shadow-[0_30px_120px_-70px_rgba(var(--accent-rgb),0.9)]">
+                <div className="bento-card-content">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="w-full space-y-3">
+                            <p className="caption opacity-80 uppercase tracking-[0.2em]">Control Center</p>
+                            <div className="flex items-center gap-3">
+                                <div className="bento-card-icon">
+                                    <User size={24} />
+                                </div>
+                                <div>
+                                    <h1 className="bento-card-title text-3xl">{t.title}</h1>
+                                    <p className="bento-card-description">Manage appearance, identity, and security preferences.</p>
+                                </div>
                             </div>
-                            <div>
-                                <h1 className="text-3xl font-black tracking-tight text-text">{t.title}</h1>
-                                <p className="body-sm text-text-muted">Manage appearance, identity, and security preferences.</p>
+                            <div className="flex flex-wrap gap-2">
+                                <Badge variant="neutral">{appLanguage.toUpperCase()}</Badge>
+                                <Badge variant="neutral">{colorScheme}</Badge>
                             </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            <Badge variant="neutral">{appLanguage.toUpperCase()}</Badge>
-                            <Badge variant="neutral">{colorScheme}</Badge>
+                        <div className="flex items-center gap-2">
+                            <Button 
+                                onClick={handleSavePersona}
+                                disabled={isSaving}
+                                variant="primary"
+                                size="md"
+                                className="gap-2 bg-white/20 hover:bg-white/30 text-white border-white/30"
+                            >
+                                {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />} {isSaving ? t.saved : t.save}
+                            </Button>
                         </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button 
-                            onClick={handleSavePersona}
-                            disabled={isSaving}
-                            variant="primary"
-                            size="md"
-                            className="gap-2"
-                        >
-                            {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />} {isSaving ? t.saved : t.save}
-                        </Button>
                     </div>
                 </div>
             </Card>
 
             <div className="flex-1 overflow-y-auto custom-scroll pr-2 space-y-2 pb-[calc(env(safe-area-inset-bottom)+4rem)]">
+                <section className="bento-grid grid grid-cols-12 gap-[var(--bento-gap)]">
                 
                 {/* 1. VISUAL & LANGUAGE */}
-                <SettingsSection title={t.theme_label || "Appearance & language"} icon={<Palette size={18} />}>
-                    <div className="p-6 bg-surface rounded-[24px] border border-border/70 grid grid-cols-1 md:grid-cols-2 gap-6 shadow-[var(--shadow-soft)]">
+                <div className="col-span-12">
+                <Card tone="bento-purple" padding="bento" bento className="bento-card">
+                    <div className="bento-card-content">
+                        <SettingsSection title={t.theme_label || "Appearance & language"} icon={<Palette size={18} />}>
+                    <div className="p-6 bg-[color:var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 grid grid-cols-1 md:grid-cols-2 gap-6 shadow-[var(--shadow-bento)]">
                         
                         {/* Theme Toggle */}
                         <div className="space-y-3">
-                            <label className="caption text-text-muted pl-1">Color scheme</label>
-                            <div className="flex bg-surface-2 p-1 rounded-xl border border-border">
+                            <label className="caption text-[color:var(--text-muted)] pl-1">Color scheme</label>
+                            <div className="flex bg-[color:var(--surface-2)] p-1 rounded-[var(--radius-lg)] border border-[color:var(--border)]">
                                 {['light', 'system', 'dark'].map((mode) => (
                                     <button 
                                         key={mode}
                                         onClick={() => setColorScheme(mode as any)}
-                                        className={`flex-1 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 ${colorScheme === mode ? 'bg-surface text-accent shadow-sm border border-border' : 'text-text-muted hover:text-text'}`}
+                                        className={`flex-1 py-2 rounded-[var(--radius-md)] text-sm font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 ${colorScheme === mode ? 'bg-[color:var(--surface)] text-[color:var(--primary)] shadow-sm border border-[color:var(--border)]' : 'text-[color:var(--text-muted)] hover:text-[color:var(--text)]'}`}
                                     >
                                         {mode === 'light' && <Sun size={12} />}
                                         {mode === 'dark' && <Moon size={12} />}
@@ -360,15 +528,15 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
 
                         {/* Language */}
                         <div className="space-y-3">
-                            <label className="caption text-text-muted pl-1 flex items-center gap-2">
+                            <label className="caption text-[color:var(--text-muted)] pl-1 flex items-center gap-2">
                                 <Globe size={12} /> Language
                             </label>
-                            <div className="flex bg-surface-2 p-1 rounded-xl border border-border">
+                            <div className="flex bg-[color:var(--surface-2)] p-1 rounded-[var(--radius-lg)] border border-[color:var(--border)]">
                                 {['id', 'en', 'bn'].map((lang) => (
                                     <button 
                                         key={lang}
                                         onClick={() => { setAppLanguage(lang); window.location.reload(); }}
-                                        className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95 ${appLanguage === lang ? 'bg-surface text-accent shadow-sm border border-border' : 'text-text-muted hover:text-text'}`}
+                                        className={`flex-1 py-2 rounded-[var(--radius-md)] text-sm font-semibold transition-all active:scale-95 ${appLanguage === lang ? 'bg-[color:var(--surface)] text-[color:var(--primary)] shadow-sm border border-[color:var(--border)]' : 'text-[color:var(--text-muted)] hover:text-[color:var(--text)]'}`}
                                     >
                                         {lang}
                                     </button>
@@ -377,14 +545,14 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                         </div>
 
                         {/* ACCENT PALETTE */}
-                        <div className="space-y-3 col-span-1 md:col-span-2 border-t border-border pt-4">
-                            <label className="caption text-text-muted pl-1">Accent color</label>
-                            <div className="flex flex-wrap gap-3 p-3 bg-surface-2 rounded-xl border border-border">
+                        <div className="space-y-3 col-span-1 md:col-span-2 border-t border-[color:var(--border)] pt-4">
+                            <label className="caption text-[color:var(--text-muted)] pl-1">Accent color</label>
+                            <div className="flex flex-wrap gap-3 p-3 bg-[color:var(--surface-2)] rounded-[var(--radius-lg)] border border-[color:var(--border)]">
                                 {Object.entries(THEME_COLORS).map(([key, color]) => (
                                     <button
                                         key={key}
                                         onClick={() => setAppTheme(key)}
-                                        className={`relative w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center transform hover:scale-110 active:scale-95 ${appTheme === key ? 'border-text scale-110 shadow-lg' : 'border-transparent'}`}
+                                        className={`relative w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center transform hover:scale-110 active:scale-95 ${appTheme === key ? 'border-[color:var(--text)] scale-110 shadow-lg' : 'border-transparent'}`}
                                         style={{ backgroundColor: color }}
                                         aria-label={`Select ${key} theme`}
                                     >
@@ -396,13 +564,19 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
 
                     </div>
                 </SettingsSection>
+                    </div>
+                </Card>
+                </div>
 
                 {/* 2. IDENTITY MATRIX */}
-                <SettingsSection title={t.identity_title || "Profile"} icon={<UserCheck size={18} />}>
-                    <div className="p-6 bg-surface rounded-[24px] border border-border/70 space-y-6 shadow-[var(--shadow-soft)]">
+                <div className="col-span-12">
+                <Card tone="bento-teal" padding="bento" bento className="bento-card">
+                    <div className="bento-card-content">
+                        <SettingsSection title={t.identity_title || "Profile"} icon={<UserCheck size={18} />}>
+                    <div className="p-6 bg-[var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 space-y-6 shadow-[var(--shadow-bento)]">
                         
                         {/* ID EDITOR */}
-                        <div className="space-y-3 pb-6 border-b border-border/70">
+                        <div className="space-y-3 pb-6 border-b border-[color:var(--border)]/50">
                             <label className="caption text-text-muted pl-1">Account ID</label>
                             {!isEditingId ? (
                                 <div className="flex justify-between items-center bg-surface-2 p-4 rounded-2xl border border-border">
@@ -479,11 +653,17 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                         </div>
                     </div>
                 </SettingsSection>
+                    </div>
+                </Card>
+                </div>
 
                 {/* 3. ASSISTANT PERSONALITY */}
-                <SettingsSection title="Assistant profile" icon={<Brain size={18} />}>
-                    <div className="p-6 bg-surface rounded-[24px] border border-border/70 shadow-[var(--shadow-soft)]">
-                        <div className="flex bg-surface-2 p-1 rounded-xl border border-border/70 mb-6">
+                <div className="col-span-12">
+                <Card tone="bento-orange" padding="bento" bento className="bento-card">
+                    <div className="bento-card-content">
+                        <SettingsSection title="Assistant profile" icon={<Brain size={18} />}>
+                    <div className="p-6 bg-[var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 shadow-[var(--shadow-bento)]">
+                        <div className="flex bg-[var(--surface-2)] p-1 rounded-xl border border-[color:var(--border)]/50 mb-6 shadow-[var(--shadow-soft)]">
                              <button onClick={() => setActiveConfigTab('HANISAH')} className={`flex-1 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 ${activeConfigTab === 'HANISAH' ? 'bg-surface text-orange-500 shadow-sm' : 'text-text-muted hover:text-text'}`}>
                                 <Zap size={12}/> Hanisah (Creative)
                              </button>
@@ -538,10 +718,16 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                         )}
                     </div>
                 </SettingsSection>
+                    </div>
+                </Card>
+                </div>
 
                 {/* 4. NEURAL UPLINKS */}
-                <SettingsSection title="AI providers" icon={<Server size={18} />}>
-                    <div className="p-6 bg-surface rounded-[24px] border border-border/70 shadow-[var(--shadow-soft)] grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="col-span-12">
+                <Card tone="bento-green" padding="bento" bento className="bento-card">
+                    <div className="bento-card-content">
+                        <SettingsSection title="AI providers" icon={<Server size={18} />}>
+                    <div className="p-6 bg-[var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 shadow-[var(--shadow-bento)] grid grid-cols-1 md:grid-cols-2 gap-3">
                         {['GEMINI', 'GROQ', 'OPENAI', 'DEEPSEEK', 'MISTRAL', 'HUGGINGFACE', 'ELEVENLABS'].map(p => (
                             <ProviderToggleRow 
                                 key={p} 
@@ -553,19 +739,174 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                         ))}
                     </div>
                 </SettingsSection>
+                    </div>
+                </Card>
+                </div>
 
                 {/* 5. SECURITY PROTOCOLS */}
-                <SettingsSection title="Security" icon={<Lock size={18} />}>
-                    <div className="p-6 bg-surface rounded-[24px] border border-border/70 shadow-[var(--shadow-soft)] space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-surface-2 rounded-xl border border-border/70">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-surface rounded-lg text-text"><Key size={16}/></div>
-                                <div>
-                                    <div className="section-title text-text">Vault PIN</div>
-                                    <div className="caption text-text-muted">SHA-256 encrypted</div>
+                <div className="col-span-12">
+                <Card tone="bento-red" padding="bento" bento className="bento-card">
+                    <div className="bento-card-content">
+                        <SettingsSection title="Security" icon={<Lock size={18} />}>
+                    <div className="p-6 bg-[var(--surface)] rounded-[var(--bento-radius)] border border-[color:var(--border)]/50 shadow-[var(--shadow-bento)] space-y-4">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[var(--radius-md)] border border-[color:var(--border)]/50 shadow-[var(--shadow-soft)]">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-surface rounded-lg text-text"><KeyRound size={16}/></div>
+                                    <div>
+                                        <div className="section-title text-text">System PIN</div>
+                                        <div className="caption text-text-muted">
+                                            {isSystemPinConfigured() ? 'SHA-256 encrypted' : 'Not configured'}
+                                        </div>
+                                    </div>
                                 </div>
+                                <Button 
+                                    variant="secondary" 
+                                    size="sm"
+                                    onClick={() => setShowChangePin(!showChangePin)}
+                                >
+                                    {showChangePin ? 'Cancel' : isSystemPinConfigured() ? 'Change PIN' : 'Setup PIN'}
+                                </Button>
                             </div>
-                            <Button variant="secondary" size="sm">Reset PIN</Button>
+
+                            {showChangePin && (
+                                <div className="p-4 bg-[var(--surface-2)] rounded-[var(--radius-md)] border border-[color:var(--border)]/50 space-y-4 animate-slide-up shadow-[var(--shadow-soft)]">
+                                    {isSystemPinConfigured() ? (
+                                        <>
+                                            <FormField label="Current PIN">
+                                                <input
+                                                    type="password"
+                                                    inputMode="numeric"
+                                                    value={currentPin}
+                                                    onChange={(e) => setCurrentPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                                                    className={authStyles.input}
+                                                    placeholder="Enter current PIN"
+                                                />
+                                            </FormField>
+                                            <FormField label="New PIN">
+                                                <input
+                                                    type="password"
+                                                    inputMode="numeric"
+                                                    value={newPin}
+                                                    onChange={(e) => setNewPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                                                    className={authStyles.input}
+                                                    placeholder="Enter new PIN (min 4 digits)"
+                                                />
+                                            </FormField>
+                                            <FormField label="Confirm New PIN">
+                                                <input
+                                                    type="password"
+                                                    inputMode="numeric"
+                                                    value={confirmPin}
+                                                    onChange={(e) => setConfirmPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                                                    className={authStyles.input}
+                                                    placeholder="Confirm new PIN"
+                                                />
+                                            </FormField>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FormField label="New PIN">
+                                                <input
+                                                    type="password"
+                                                    inputMode="numeric"
+                                                    value={newPin}
+                                                    onChange={(e) => setNewPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                                                    className={authStyles.input}
+                                                    placeholder="Enter new PIN (min 4 digits)"
+                                                />
+                                            </FormField>
+                                            <FormField label="Confirm PIN">
+                                                <input
+                                                    type="password"
+                                                    inputMode="numeric"
+                                                    value={confirmPin}
+                                                    onChange={(e) => setConfirmPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                                                    className={authStyles.input}
+                                                    placeholder="Confirm PIN"
+                                                />
+                                            </FormField>
+                                        </>
+                                    )}
+                                    {pinError && <p className="text-danger text-xs">{pinError}</p>}
+                                    {pinSuccess && <p className="text-success text-xs">{pinSuccess}</p>}
+                                    <Button
+                                        onClick={handleChangePin}
+                                        disabled={isSaving || (isSystemPinConfigured() && !currentPin) || !newPin || !confirmPin || newPin.length < 4}
+                                        variant="primary"
+                                        size="sm"
+                                        className="w-full"
+                                    >
+                                        {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                                        {isSaving ? 'Saving...' : isSystemPinConfigured() ? 'Change PIN' : 'Setup PIN'}
+                                    </Button>
+                                </div>
+                            )}
+
+                            {auth && auth.currentUser && auth.currentUser.email && (
+                                <>
+                                    <div className="flex items-center justify-between p-4 bg-[var(--surface-2)] rounded-[var(--radius-md)] border border-[color:var(--border)]/50 shadow-[var(--shadow-soft)]">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-surface rounded-lg text-text"><Lock size={16}/></div>
+                                            <div>
+                                                <div className="section-title text-text">Account Password</div>
+                                                <div className="caption text-text-muted">Firebase authentication</div>
+                                            </div>
+                                        </div>
+                                        <Button 
+                                            variant="secondary" 
+                                            size="sm"
+                                            onClick={() => setShowChangePassword(!showChangePassword)}
+                                        >
+                                            {showChangePassword ? 'Cancel' : 'Change Password'}
+                                        </Button>
+                                    </div>
+
+                                    {showChangePassword && (
+                                        <div className="p-4 bg-[var(--surface-2)] rounded-[var(--radius-md)] border border-[color:var(--border)]/50 space-y-4 animate-slide-up shadow-[var(--shadow-soft)]">
+                                            <FormField label="Current Password">
+                                                <input
+                                                    type="password"
+                                                    value={currentPassword}
+                                                    onChange={(e) => setCurrentPassword(e.target.value)}
+                                                    className={authStyles.input}
+                                                    placeholder="Enter current password"
+                                                />
+                                            </FormField>
+                                            <FormField label="New Password">
+                                                <input
+                                                    type="password"
+                                                    value={newPassword}
+                                                    onChange={(e) => setNewPassword(e.target.value)}
+                                                    className={authStyles.input}
+                                                    placeholder="Enter new password (min 8 characters)"
+                                                />
+                                            </FormField>
+                                            <FormField label="Confirm New Password">
+                                                <input
+                                                    type="password"
+                                                    value={confirmPassword}
+                                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                                    className={authStyles.input}
+                                                    placeholder="Confirm new password"
+                                                />
+                                            </FormField>
+                                            {passwordError && <p className="text-danger text-xs">{passwordError}</p>}
+                                            {passwordSuccess && <p className="text-success text-xs">{passwordSuccess}</p>}
+                                            <Button
+                                                onClick={handleChangePassword}
+                                                disabled={isSaving || !currentPassword || !newPassword || !confirmPassword || newPassword.length < 8}
+                                                variant="primary"
+                                                size="sm"
+                                                className="w-full"
+                                            >
+                                                {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Lock size={14} />}
+                                                {isSaving ? 'Changing...' : 'Change Password'}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </>
+                            )}
                         </div>
 
                         {isBioAvailable && (
@@ -587,11 +928,17 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                         )}
                     </div>
                 </SettingsSection>
+                    </div>
+                </Card>
+                </div>
 
                 {/* 6. DATA GOVERNANCE */}
-                <SettingsSection title={t.data_title || "Data"} icon={<Database size={18} />}>
+                <div className="col-span-12">
+                <Card tone="bento-blue" padding="bento" bento className="bento-card">
+                    <div className="bento-card-content">
+                        <SettingsSection title={t.data_title || "Data"} icon={<Database size={18} />}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <button onClick={handleBackup} className="p-4 bg-surface border border-border/70 hover:border-blue-500/50 rounded-2xl flex items-center gap-3 group transition-all active:scale-95 shadow-[var(--shadow-soft)]">
+                        <button onClick={handleBackup} className="p-4 bg-[var(--surface)] border border-[color:var(--border)]/50 hover:border-blue-500/50 rounded-[var(--bento-radius)] flex items-center gap-3 group transition-all active:scale-95 shadow-[var(--shadow-bento)]">
                             <div className="p-2.5 bg-blue-500/10 text-blue-500 rounded-lg group-hover:bg-blue-500 group-hover:text-white transition-colors"><Download size={18}/></div>
                             <div className="text-left">
                                 <h4 className="section-title text-text">{t.backup}</h4>
@@ -599,7 +946,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                             </div>
                         </button>
 
-                        <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-surface border border-border/70 hover:border-emerald-500/50 rounded-2xl flex items-center gap-3 group transition-all active:scale-95 shadow-[var(--shadow-soft)]">
+                        <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-[var(--surface)] border border-[color:var(--border)]/50 hover:border-emerald-500/50 rounded-[var(--bento-radius)] flex items-center gap-3 group transition-all active:scale-95 shadow-[var(--shadow-bento)]">
                             <div className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors"><Upload size={18}/></div>
                             <div className="text-left">
                                 <h4 className="section-title text-text">{t.restore}</h4>
@@ -608,7 +955,7 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                             <input type="file" ref={fileInputRef} className="hidden" accept="application/json" onChange={handleRestore} />
                         </button>
 
-                        <button onClick={onNavigate.bind(null, 'system')} className="w-full p-4 bg-surface-2 hover:bg-surface border border-border/70 rounded-2xl flex items-center gap-3 group transition-all md:col-span-2 active:scale-[0.98] shadow-[var(--shadow-soft)]">
+                        <button onClick={onNavigate.bind(null, 'system')} className="w-full p-4 bg-[var(--surface-2)] hover:bg-[var(--surface)] border border-[color:var(--border)]/50 rounded-[var(--bento-radius)] flex items-center gap-3 group transition-all md:col-span-2 active:scale-[0.98] shadow-[var(--shadow-bento)]">
                              <div className="p-2.5 bg-surface text-text rounded-lg"><Activity size={18}/></div>
                              <div className="text-left">
                                 <h4 className="section-title text-text">System diagnostics</h4>
@@ -617,7 +964,11 @@ const SettingsView: React.FC<SettingsViewProps> = memo(({ onNavigate }) => {
                         </button>
                     </div>
                 </SettingsSection>
+                    </div>
+                </Card>
+                </div>
 
+                </section>
             </div>
         </div>
     );

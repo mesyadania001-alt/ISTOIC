@@ -1,6 +1,11 @@
 
 # IStoicAI v101.0 Platinum Cognitive Terminal
 
+> **📌 CONTINUATION GUIDE**: Untuk melanjutkan pekerjaan di sesi berikutnya, baca:
+> - `SESSION_CONTEXT.md` - Full context dari sesi ini
+> - `CONTINUATION_PROMPTS.md` - Quick prompts untuk AI
+> - `MODULE_UPDATE_GUIDE.md` - Panduan update per module
+
 Selamat datang di **IStoicAI v101.0 Platinum**. Sistem operasi kognitif pribadi yang menggabungkan filsafat Stoikisme dengan orkestrasi AI multi-engine (Hydra Omni-Race).
 
 ## 🚀 Fitur Baru di v101.0

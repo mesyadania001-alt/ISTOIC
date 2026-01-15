@@ -7,6 +7,13 @@ import { Button } from '../components/ui/Button';
 
 expect.extend(toHaveNoViolations);
 
+// Type augmentation for jest-axe
+declare module 'vitest' {
+  interface Assertion<T = any> {
+    toHaveNoViolations(): T;
+  }
+}
+
 describe('Accessibility smoke tests', () => {
   it('Button component should have no detectable a11y violations', async () => {
     const { container } = render(<Button>Click me</Button>);

@@ -1,6 +1,7 @@
 
 import React, { memo } from 'react';
 import { Loader2, ChevronDown, ArrowUpRight } from 'lucide-react';
+import { Card } from '../../../components/ui/Card';
 
 interface ToolGroupProps {
     title: string;
@@ -16,11 +17,15 @@ interface ToolGroupProps {
 export const ToolGroup: React.FC<ToolGroupProps> = memo(({ 
     title, icon, subtitle, isOpen, onToggle, children, isLoading, loadingText 
 }) => (
-    <div className={`
-        relative overflow-hidden rounded-[var(--radius-lg)] border transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] group transform-gpu will-change-[height,border-color,box-shadow]
+    <Card 
+        tone={isOpen ? "bento-purple" : "default"}
+        padding="none"
+        bento={isOpen}
+        className={`
+        relative overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] group transform-gpu will-change-[height,border-color,box-shadow]
         ${isOpen 
-            ? 'bg-surface border-border shadow-[var(--shadow-soft)]' 
-            : 'bg-surface-2 border-border hover:bg-surface hover:shadow-[var(--shadow-soft)]' 
+            ? 'bento-card shadow-[var(--shadow-bento)]' 
+            : 'hover:shadow-[var(--shadow-soft)]' 
         }
     `}>
         {/* Loading Progress Line */}
@@ -32,22 +37,22 @@ export const ToolGroup: React.FC<ToolGroupProps> = memo(({
         >
             <div className="flex items-start md:items-center gap-5 md:gap-8">
                 <div className={`
-                    w-14 h-14 md:w-20 md:h-20 rounded-[20px] flex items-center justify-center text-text-muted shadow-sm border border-border transition-all duration-500 shrink-0 relative overflow-hidden transform-gpu
-                    ${isOpen ? 'bg-accent/10 text-accent border-accent/20' : 'bg-surface-2 text-text-muted group-hover:text-accent'}
-                    ${isLoading ? 'text-accent' : ''}
+                    w-14 h-14 md:w-20 md:h-20 rounded-[var(--radius-md)] flex items-center justify-center shadow-[var(--shadow-soft)] border transition-all duration-500 shrink-0 relative overflow-hidden transform-gpu
+                    ${isOpen ? 'bg-white/20 text-white border-white/30' : 'bg-[var(--surface-2)] text-[var(--text-muted)] border-[color:var(--border)]/50 group-hover:text-[var(--accent)]'}
+                    ${isLoading && !isOpen ? 'text-[var(--accent)]' : ''}
                 `}>
                     {isLoading 
-                        ? <Loader2 size={28} className="animate-spin relative z-10" /> 
-                        : React.cloneElement(icon as React.ReactElement<any>, { size: 28, strokeWidth: 1.7, className: "relative z-10" })
+                        ? <Loader2 size={28} className={`animate-spin relative z-10 ${isOpen ? 'text-white' : ''}`} /> 
+                        : React.cloneElement(icon as React.ReactElement<any>, { size: 28, strokeWidth: 1.7, className: `relative z-10 ${isOpen ? 'text-white' : ''}` })
                     }
                 </div>
                 
                 <div className="space-y-1">
-                    <h3 className={`section-title text-text transition-transform duration-300 ${isOpen ? 'translate-x-0.5' : 'group-hover:translate-x-0.5'}`}>
+                    <h3 className={`${isOpen ? 'bento-card-title text-white' : 'section-title text-text'} transition-transform duration-300 ${isOpen ? 'translate-x-0.5' : 'group-hover:translate-x-0.5'}`}>
                         {title}
                     </h3>
                     <div className="flex flex-col gap-1">
-                        <p className={`caption flex items-center gap-2 transition-all duration-500 ${isLoading ? 'text-accent' : 'text-text-muted group-hover:text-text'}`}>
+                        <p className={`${isOpen ? 'bento-card-description text-white/80' : 'caption'} flex items-center gap-2 transition-all duration-500 ${isLoading && !isOpen ? 'text-accent' : ''}`}>
                              {isLoading ? (loadingText || 'Working...') : subtitle}
                         </p>
                     </div>
@@ -61,7 +66,7 @@ export const ToolGroup: React.FC<ToolGroupProps> = memo(({
                         <ArrowUpRight size={18} className="text-accent" />
                     </div>
                 )}
-                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full bg-surface flex items-center justify-center transition-all duration-500 border border-border ${isOpen ? 'rotate-180 bg-accent text-text-invert shadow-[0_0_20px_var(--accent-glow)] border-transparent' : 'text-text-muted group-hover:text-text'}`}>
+                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-500 border shadow-[var(--shadow-soft)] ${isOpen ? 'rotate-180 bg-white/20 text-white shadow-[var(--shadow-bento)] border-white/30' : 'bg-[var(--surface)] text-[var(--text-muted)] group-hover:text-[var(--text)] border-[color:var(--border)]/50'}`}>
                     <ChevronDown size={20} />
                 </div>
             </div>
@@ -86,5 +91,5 @@ export const ToolGroup: React.FC<ToolGroupProps> = memo(({
                 </div>
             </div>
         </div>
-    </div>
+    </Card>
 ));

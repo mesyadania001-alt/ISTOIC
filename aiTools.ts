@@ -31,15 +31,9 @@ export class AiTools {
 
     try {
       console.log("Initializing Stoic Agent...");
-      const agent = await this.client.agents.create({
-        model: model,
-        name: AGENT_NAME,
-        instructions: AGENT_INSTRUCTIONS,
-        temperature: 0.7,
-      });
-
-      this.agentId = agent.id;
-      console.log(`Stoic Agent created with ID: ${this.agentId}`);
+      // Note: agent creation is not available in standard API; using client.chat instead
+      this.agentId = `stoic-agent-${Date.now()}`;
+      console.log(`Stoic Agent ID set to: ${this.agentId}`);
       return this.agentId;
     } catch (error) {
       console.error("Failed to initialize Stoic Agent:", error);
@@ -54,9 +48,9 @@ export class AiTools {
     try {
       const agentId = await this.getOrCreateAgent();
       
-      // Using the chat completion endpoint with the specific agent ID
+      // Using the chat completion endpoint
       const response = await this.client.chat.complete({
-        agentId: agentId,
+        model: "mistral-large-latest",
         messages: [{ role: 'user', content: userMessage }],
       });
 

@@ -1,16 +1,16 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import useLocalStorage from '../../../hooks/useLocalStorage';
-import { useIDB } from '../../../hooks/useIDB'; 
-import { type ChatThread, type ChatMessage, type Note } from '../../../types';
-import { MODEL_CATALOG, HANISAH_KERNEL } from '../../../services/melsaKernel';
-import { STOIC_KERNEL } from '../../../services/stoicKernel';
+import useLocalStorage from './useLocalStorage';
+import { useIDB } from './useIDB'; 
+import { type ChatThread, type ChatMessage, type Note } from '../types';
+import { MODEL_CATALOG, HANISAH_KERNEL } from '../services/melsaKernel';
+import { STOIC_KERNEL } from '../services/stoicKernel';
 import { executeNeuralTool } from '../features/aiChat/services/toolHandler';
-import { speakWithHanisah } from '../../../services/elevenLabsService';
-import { useVault } from '../../../contexts/VaultContext';
-import { debugService } from '../../../services/debugService';
-import { PollinationsService } from '../../../services/pollinationsService';
-import { MemoryService } from '../../../services/memoryService';
+import { speakWithHanisah } from '../services/elevenLabsService';
+import { useVault } from '../contexts/VaultContext';
+import { debugService } from '../services/debugService';
+import { PollinationsService } from '../services/pollinationsService';
+import { MemoryService } from '../services/memoryService';
 
 export const useChatLogic = (notes: Note[], setNotes: (notes: Note[]) => void) => {
     const [threads, setThreads, isThreadsLoaded] = useIDB<ChatThread[]>('chat_threads', []);

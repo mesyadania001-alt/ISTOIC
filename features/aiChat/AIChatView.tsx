@@ -43,24 +43,28 @@ const PersonaToggle: React.FC<{ mode: 'hanisah' | 'stoic'; onToggle: () => void;
     );
 });
 
-const SuggestionCard: React.FC<{ icon: React.ReactNode, label: string, desc: string, onClick: () => void, accent?: string, delay?: number }> = React.memo(({ icon, label, desc, onClick, accent = "text-text-muted group-hover:text-accent", delay = 0 }) => (
+const SuggestionCard: React.FC<{ icon: React.ReactNode, label: string, desc: string, onClick: () => void, tone?: string, delay?: number }> = React.memo(({ icon, label, desc, onClick, tone = "bento-blue", delay = 0 }) => (
     <Card
         as="button"
         interactive
-        padding="md"
+        padding="bento"
+        bento
+        tone={tone as any}
         onClick={onClick}
         style={{ animationDelay: `${delay}ms` }}
-        className="relative overflow-hidden group text-left transition-all duration-300 ease-out hover:-translate-y-1 active:scale-[0.97] flex items-center gap-5 h-full animate-slide-up border border-[color:var(--border)]/40 bg-gradient-to-br from-[var(--surface)] to-[var(--surface-2)] hover:border-[color:var(--border)]/80 hover:bg-gradient-to-br hover:from-[var(--surface)]/98 hover:to-[var(--surface-2)]/95 shadow-sm hover:shadow-lg"
+        className="bento-card animate-slide-up"
     >
-        <div className={cn('w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--surface-2)] to-[var(--surface)] flex items-center justify-center transition-all duration-300 group-hover:scale-125 border border-[color:var(--border)]/60 group-hover:border-[color:var(--border)]', accent)}>
-            {React.cloneElement(icon as React.ReactElement<any>, { size: 20, strokeWidth: 2.2 })}
-        </div>
-        <div className="flex-1 min-w-0">
-            <h4 className="section-title text-text font-bold text-[15px]">{label}</h4>
-            <p className="caption text-text-muted text-[13px] truncate opacity-85 group-hover:opacity-100 transition-opacity">{desc}</p>
-        </div>
-        <div className="text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors duration-300">
-            <Code size={18} strokeWidth={2} />
+        <div className="bento-card-content flex items-center gap-4">
+            <div className="bento-card-icon">
+                {React.cloneElement(icon as React.ReactElement<any>, { size: 24, strokeWidth: 2.2 })}
+            </div>
+            <div className="flex-1 min-w-0">
+                <h4 className="bento-card-title text-[15px]">{label}</h4>
+                <p className="bento-card-description text-[13px] truncate">{desc}</p>
+            </div>
+            <div className="opacity-60 group-hover:opacity-100 transition-opacity">
+                <Code size={18} strokeWidth={2} />
+            </div>
         </div>
     </Card>
 ));
@@ -154,84 +158,88 @@ const AIChatView: React.FC<AIChatViewProps> = ({ chatLogic }) => {
     const isHydraActive = activeModel?.id === 'auto-best';
 
     return (
-        <div className="h-full w-full relative bg-noise flex flex-col overflow-hidden bg-[var(--bg)]" style={{ overscrollBehavior: 'contain', position: 'relative' }}>
+        <div className="min-app-dvh w-full relative bg-noise flex flex-col bg-[var(--bg)]" style={{ overscrollBehavior: 'contain', position: 'relative' }}>
             <VaultPinModal isOpen={showPinModal} onClose={() => setShowPinModal(false)} onSuccess={() => setIsVaultSynced(true)} />
             
             <header className="shrink-0 z-50 pt-[calc(max(0.5rem,env(safe-area-inset-top)))] px-4 sm:px-5 md:px-6">
                 <div className="mx-auto w-full max-w-[860px]">
-                    <Card tone="translucent" padding="sm" className="border-border/60 shadow-[0_24px_90px_-60px_rgba(var(--accent-rgb),0.9)]">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                            <div className="flex flex-wrap items-center gap-3">
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    className="h-11 px-4 rounded-[var(--radius-md)]"
-                                    onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_BTN_MODEL_PICKER, FN_REGISTRY.CHAT_SELECT_MODEL, 'OPEN'); setShowModelPicker(true); }}
-                                >
-                                    <span className="flex items-center gap-2">
-                                        <span className={`w-7 h-7 rounded-xl flex items-center justify-center ${isHydraActive ? 'bg-[color:var(--success)]/15 text-[color:var(--success)]' : 'bg-[color:var(--surface-2)] text-[color:var(--text)]'}`}>
-                                            {isHydraActive ? <Infinity size={16} className="animate-pulse" strokeWidth={2.5} /> : <Zap size={16} strokeWidth={2.5} />}
+                    <Card tone="bento-purple" padding="bento" bento className="bento-card shadow-[0_24px_90px_-60px_rgba(var(--accent-rgb),0.9)]">
+                        <div className="bento-card-content">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        className="h-11 px-4 rounded-[var(--radius-md)] bg-white/10 hover:bg-white/20 border-white/20 text-white"
+                                        onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_BTN_MODEL_PICKER, FN_REGISTRY.CHAT_SELECT_MODEL, 'OPEN'); setShowModelPicker(true); }}
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <span className={`w-7 h-7 rounded-xl flex items-center justify-center ${isHydraActive ? 'bg-white/20 text-white' : 'bg-white/10 text-white'}`}>
+                                                {isHydraActive ? <Infinity size={16} className="animate-pulse" strokeWidth={2.5} /> : <Zap size={16} strokeWidth={2.5} />}
+                                            </span>
+                                            <span className="caption font-semibold text-white">{isHydraActive ? 'Hydra' : (activeModel?.name?.split(' ')[0] || 'Model')}</span>
                                         </span>
-                                        <span className="caption font-semibold text-text">{isHydraActive ? 'Hydra' : (activeModel?.name?.split(' ')[0] || 'Model')}</span>
-                                    </span>
-                                </Button>
-                                <PersonaToggle mode={personaMode} onToggle={changePersona} />
-                                <div className="flex items-center gap-2">
-                                    <span className="px-3 py-1 rounded-full bg-[color:var(--surface-2)] text-xs font-semibold text-text-muted">{isVaultSynced ? 'Vault sinkron' : 'Vault off'}</span>
-                                    <span className="px-3 py-1 rounded-full bg-[color:var(--surface-2)] text-xs font-semibold text-text-muted">{threads.length} sesi</span>
+                                    </Button>
+                                    <PersonaToggle mode={personaMode} onToggle={changePersona} />
+                                    <div className="flex items-center gap-2">
+                                        <span className="px-3 py-1 rounded-full bg-white/10 text-white/80 text-xs font-semibold border border-white/20">{isVaultSynced ? 'Vault sinkron' : 'Vault off'}</span>
+                                        <span className="px-3 py-1 rounded-full bg-white/10 text-white/80 text-xs font-semibold border border-white/20">{threads.length} sesi</span>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-10 w-10 p-0 rounded-[var(--radius-md)]"
-                                    disabled={isStoic}
-                                    onClick={() => !isStoic && setShowImagePicker(true)}
-                                >
-                                    {isStoic ? <Lock size={18} strokeWidth={2.5} /> : <ImageIcon size={18} strokeWidth={2.5} />}
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-10 w-10 p-0 rounded-[var(--radius-md)]"
-                                    onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_BTN_HISTORY, FN_REGISTRY.CHAT_LOAD_HISTORY, 'OPEN'); setShowHistoryDrawer(true); }}
-                                >
-                                    <History size={18} strokeWidth={2.5} />
-                                </Button>
-                                <Button
-                                    variant={isLive ? 'destructive' : 'ghost'}
-                                    size="sm"
-                                    className="h-10 w-10 p-0 rounded-[var(--radius-md)]"
-                                    disabled={!isLiveLinkEnabled}
-                                    onClick={() => { if (isLiveLinkEnabled) { isLive ? stopSession() : startSession(personaMode); } }}
-                                >
-                                    <Radio size={18} strokeWidth={2.5} />
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-10 w-10 p-0 rounded-[var(--radius-md)] text-white hover:bg-white/20"
+                                        disabled={isStoic}
+                                        onClick={() => !isStoic && setShowImagePicker(true)}
+                                    >
+                                        {isStoic ? <Lock size={18} strokeWidth={2.5} /> : <ImageIcon size={18} strokeWidth={2.5} />}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-10 w-10 p-0 rounded-[var(--radius-md)] text-white hover:bg-white/20"
+                                        onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_BTN_HISTORY, FN_REGISTRY.CHAT_LOAD_HISTORY, 'OPEN'); setShowHistoryDrawer(true); }}
+                                    >
+                                        <History size={18} strokeWidth={2.5} />
+                                    </Button>
+                                    <Button
+                                        variant={isLive ? 'destructive' : 'ghost'}
+                                        size="sm"
+                                        className="h-10 w-10 p-0 rounded-[var(--radius-md)] text-white hover:bg-white/20"
+                                        disabled={!isLiveLinkEnabled}
+                                        onClick={() => { if (isLiveLinkEnabled) { isLive ? stopSession() : startSession(personaMode); } }}
+                                    >
+                                        <Radio size={18} strokeWidth={2.5} />
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     </Card>
                 </div>
             </header>
-            <div className="flex-1 min-h-0 relative w-full max-w-[860px] mx-auto px-4 sm:px-5 md:px-6 pt-4">
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scroll relative w-full max-w-[860px] mx-auto px-4 sm:px-5 md:px-6 pt-4">
                 {showEmptyState ? (
                     <div className="flex flex-col h-full justify-center items-center w-full pb-20 animate-fade-in overflow-y-auto custom-scroll px-4 sm:px-6">
                             <div className="text-center mb-12 space-y-5">
-                            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4 bg-gradient-to-br from-[var(--accent)]/20 to-[var(--accent)]/5 text-[var(--accent)] border border-[color:var(--accent)]/30 shadow-lg">
-                                {personaMode === 'hanisah' ? <Flame size={40} strokeWidth={1.5} /> : <Brain size={40} strokeWidth={1.5} />}
-                            </div>
-                            <div>
-                                <h2 className="page-title text-2xl md:text-3xl font-bold text-[var(--text)]">{personaMode === 'hanisah' ? 'Hanisah' : 'Stoic'}</h2>
-                                <p className="body-sm text-[var(--text-muted)] mt-2 text-[15px] font-medium">{personaMode === 'hanisah' ? 'Percakapan natural, empatik & kreatif' : 'Analisis runtut, logis & objektif'}</p>
-                            </div>
+                            <Card tone={personaMode === 'hanisah' ? "bento-orange" : "bento-teal"} padding="bento" bento className="bento-card inline-block">
+                                <div className="bento-card-content">
+                                    <div className="bento-card-icon mx-auto mb-4">
+                                        {personaMode === 'hanisah' ? <Flame size={40} strokeWidth={1.5} /> : <Brain size={40} strokeWidth={1.5} />}
+                                    </div>
+                                    <h2 className="bento-card-title text-2xl md:text-3xl">{personaMode === 'hanisah' ? 'Hanisah' : 'Stoic'}</h2>
+                                    <p className="bento-card-description mt-2 text-[15px]">{personaMode === 'hanisah' ? 'Percakapan natural, empatik & kreatif' : 'Analisis runtut, logis & objektif'}</p>
+                                </div>
+                            </Card>
                             </div>
                         <div className="w-full max-w-2xl mx-auto animate-slide-up relative z-20" style={{ animationDelay: '100ms' }}>
                             <ChatInput input={input} setInput={setInput} isLoading={isLoading} onSubmit={sendMessage} onStop={stopGeneration} onNewChat={() => handleNewChat(personaMode)} onFocusChange={() => {}} aiName={personaMode.toUpperCase()} isVaultSynced={isVaultSynced} onToggleVaultSync={handleVaultToggle} personaMode={personaMode} isVaultEnabled={isVaultConfigEnabled} onTogglePersona={changePersona} variant="hero" onPollinations={generateWithPollinations} disableVisuals={isStoic} />
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl mx-auto mt-10">
-                            {!isStoic ? <SuggestionCard icon={<SparklesIcon />} label="Buat Visual" desc="Buatkan gambar beresolusi tinggi." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'GEN_IMG'); setInput("Buatkan gambar pemandangan cinematic dengan pencahayaan hangat."); }} accent="text-[var(--accent)] group-hover:text-[var(--accent)]" delay={150} /> : <SuggestionCard icon={<Brain />} label="First Principles" desc="Urai masalah kompleks dari dasar." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'LOGIC'); setInput("Analisis masalah ini dengan first principles: [Masalah]"); }} accent="text-[var(--accent-2)] group-hover:text-[var(--accent-2)]" delay={150} />}
-                            <SuggestionCard icon={<Code />} label="Code Audit" desc="Debug & optimalkan algoritma." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'CODE_AUDIT'); setInput("Analisis algoritma ini untuk kompleksitas: [Kode]"); }} accent="text-[var(--success)] group-hover:text-[var(--success)]" delay={200} />
+                        <div className="bento-grid grid grid-cols-1 md:grid-cols-2 gap-[var(--bento-gap)] w-full max-w-2xl mx-auto mt-10">
+                            {!isStoic ? <SuggestionCard icon={<SparklesIcon />} label="Buat Visual" desc="Buatkan gambar beresolusi tinggi." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'GEN_IMG'); setInput("Buatkan gambar pemandangan cinematic dengan pencahayaan hangat."); }} tone="bento-orange" delay={150} /> : <SuggestionCard icon={<Brain />} label="First Principles" desc="Urai masalah kompleks dari dasar." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'LOGIC'); setInput("Analisis masalah ini dengan first principles: [Masalah]"); }} tone="bento-teal" delay={150} />}
+                            <SuggestionCard icon={<Code />} label="Code Audit" desc="Debug & optimalkan algoritma." onClick={() => { debugService.logAction(UI_REGISTRY.CHAT_SUGGESTION_CARD, FN_REGISTRY.CHAT_SEND_MESSAGE, 'CODE_AUDIT'); setInput("Analisis algoritma ini untuk kompleksitas: [Kode]"); }} tone="bento-green" delay={200} />
                         </div>
                     </div>
                 ) : (

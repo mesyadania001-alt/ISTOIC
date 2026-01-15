@@ -27,6 +27,19 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 
 /**
+ * Helper function to detect iOS PWA
+ */
+function isIosPwa(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = window.navigator.userAgent || "";
+  const isIos = /iPad|iPhone|iPod/.test(ua);
+  const isStandalone =
+    window.matchMedia?.("(display-mode: standalone)")?.matches ||
+    (window.navigator as { standalone?: boolean }).standalone === true;
+  return isIos && isStandalone;
+}
+
+/**
  * Note: Tangkap redirect balik dari browser ke app (Capacitor)
  * Ini penting untuk Firebase Google Login redirect.
  */
@@ -44,6 +57,24 @@ if (Capacitor.isNativePlatform()) {
     // Kembalikan ke root app (hindari nyangkut di handler page)
     window.location.replace('/');
   });
+}
+
+/**
+ * Handle redirect result for PWA (especially iOS PWA)
+ * NOTE: We don't call getRedirectResult here to avoid consuming it before AuthView can process it.
+ * AuthView will handle the redirect through finalizeRedirectIfAny() which properly manages the flow.
+ * This section only ensures the redirect flag is set if we detect a redirect return.
+ */
+if (!Capacitor.isNativePlatform() && isIosPwa()) {
+  // Check if we're returning from a redirect by looking at URL params or session flag
+  const redirectPending = sessionStorage.getItem("istok_login_redirect") === "pending";
+  
+  if (redirectPending) {
+    // Just log that we detected a redirect return - let AuthView handle the actual processing
+    console.log('[PWA_REDIRECT] Detected redirect return, AuthView will process it');
+    // Don't call getRedirectResult here - let AuthView do it through finalizeRedirectIfAny
+    // This prevents consuming the redirect result before AuthView can use it
+  }
 }
 
 /**

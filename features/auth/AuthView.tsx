@@ -87,11 +87,34 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
   const [isHardLocked, setIsHardLocked] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
+  // Success transition state
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  // Prevent multiple simultaneous auth attempts
+  const [isAuthAttemptInProgress, setIsAuthAttemptInProgress] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   const triggerShake = () => {
     setShake(true);
     setTimeout(() => setShake(false), 500);
+  };
+
+  const handleAuthSuccess = async (identity: IStokUserIdentity) => {
+    setIsTransitioning(true);
+    
+    // Brief delay for visual feedback
+    setTimeout(() => {
+      setIdentity(identity);
+      const nextStage = isSystemPinConfigured() ? "LOCKED" : "SETUP_PIN";
+      setStage(nextStage);
+      setIsTransitioning(false);
+      
+      // Final transition to dashboard after stage change
+      setTimeout(() => {
+        onAuthSuccess();
+      }, 200);
+    }, 200);
   };
 
   const setNiceError = (msg: string) => {
@@ -178,13 +201,20 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
+    let initTimeoutId: ReturnType<typeof setTimeout> | undefined;
+    let isInitializing = false;
 
     const initFlow = async () => {
+      // Prevent concurrent initialization
+      if (isInitializing) return;
+      isInitializing = true;
+
       setError(null);
 
       if (firebaseConfigError) {
         setStage("WELCOME");
         setNiceError(firebaseConfigError);
+        isInitializing = false;
         return;
       }
 
@@ -195,52 +225,172 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         console.warn("Auth persistence setup failed, continuing with session scope.", e);
       }
 
+      // Check if user has identity but no PIN configured (new user)
       if (identity && identity.istokId) {
-        if (isSystemPinConfigured()) {
-          if (bioEnabled && !isHardLocked) {
-            setStage("BIOMETRIC_SCAN");
-            handleBiometricScan();
-          } else {
-            setStage("LOCKED");
-          }
-        } else {
+        // Always check PIN first - new users should setup PIN
+        if (!isSystemPinConfigured()) {
           setStage("SETUP_PIN");
+          isInitializing = false;
+          return;
         }
+        // Only go to LOCKED if PIN is already configured
+        if (bioEnabled && !isHardLocked) {
+          setStage("BIOMETRIC_SCAN");
+          handleBiometricScan();
+        } else {
+          setStage("LOCKED");
+        }
+        isInitializing = false;
         return;
       }
 
-      // Handle redirect flow (PWA iOS)
-      if (sessionStorage.getItem("istok_login_redirect") === "pending") {
-        const redirectIdentity = await IstokIdentityService.finalizeRedirectIfAny();
+      // Handle redirect flow (PWA iOS) - only check once per session
+      const redirectPending = sessionStorage.getItem("istok_login_redirect") === "pending";
+      const redirectProcessed = sessionStorage.getItem("istok_redirect_processed") === "true";
+      const redirectProcessing = sessionStorage.getItem("istok_redirect_processing") === "true";
+      const redirectHandled = sessionStorage.getItem("istok_redirect_handled") === "true";
+      
+      // If redirect was handled at index.tsx level, clear the flag and let auth state handle it
+      if (redirectHandled) {
+        sessionStorage.removeItem("istok_redirect_handled");
         sessionStorage.removeItem("istok_login_redirect");
-
-        if (redirectIdentity) {
-          if (redirectIdentity.istokId) {
-            setIdentity(redirectIdentity);
-
-            if (isSystemPinConfigured()) {
-              if (bioEnabled && !isHardLocked) {
-                setStage("BIOMETRIC_SCAN");
-                handleBiometricScan();
-              } else {
-                setStage("LOCKED");
-              }
-            } else {
-              setStage("SETUP_PIN");
-            }
-            return;
-          }
-
-          setPendingGoogleUser(redirectIdentity);
-          setStage("CREATE_ID");
-          return;
+        sessionStorage.removeItem("istok_redirect_processed");
+        sessionStorage.removeItem("istok_redirect_processing");
+        // Continue to auth state check below
+      }
+      
+      // Prevent infinite loop: if redirect is being processed, wait a bit then clear and continue
+      if (redirectProcessing && !redirectHandled) {
+        // Wait a short time for processing to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const stillProcessing = sessionStorage.getItem("istok_redirect_processing") === "true";
+        if (stillProcessing) {
+          // Processing took too long, clear all flags and continue
+          console.warn("[AUTH] Redirect processing timeout, clearing flags");
+          sessionStorage.removeItem("istok_login_redirect");
+          sessionStorage.removeItem("istok_redirect_processed");
+          sessionStorage.removeItem("istok_redirect_processing");
         }
+      }
+      
+      if (redirectPending && !redirectProcessed && !isAuthAttemptInProgress) {
+        // Mark as processing to prevent multiple calls
+        sessionStorage.setItem("istok_redirect_processed", "true");
+        sessionStorage.setItem("istok_redirect_processing", "true");
+        
+        try {
+          const redirectIdentity = await IstokIdentityService.finalizeRedirectIfAny();
+
+          if (redirectIdentity) {
+            // Clear all flags on success
+            sessionStorage.removeItem("istok_login_redirect");
+            sessionStorage.removeItem("istok_redirect_processed");
+            sessionStorage.removeItem("istok_redirect_processing");
+            
+            // Set flag to indicate redirect was successfully processed
+            // This prevents onAuthStateChanged from processing the same user again
+            sessionStorage.setItem("istok_redirect_success", "true");
+            
+            // Persist identity immediately to ensure it's saved
+            // finalizeRedirectIfAny already persists, but we ensure it here too
+            setIdentity(redirectIdentity);
+            
+            if (redirectIdentity.istokId) {
+              // User has existing profile
+              // Always check PIN first - new users should setup PIN
+              if (!isSystemPinConfigured()) {
+                setStage("SETUP_PIN");
+              } else {
+                // Only go to LOCKED if PIN is already configured
+                if (bioEnabled && !isHardLocked) {
+                  setStage("BIOMETRIC_SCAN");
+                  handleBiometricScan();
+                } else {
+                  setStage("LOCKED");
+                }
+              }
+              isInitializing = false;
+              return;
+            }
+
+            // New user, needs to create identity
+            setPendingGoogleUser(redirectIdentity);
+            setStage("CREATE_ID");
+            isInitializing = false;
+            return;
+          } else {
+            // No identity found, clear all flags and continue to normal flow
+            console.log("[AUTH] Redirect completed but no identity found, clearing flags");
+            sessionStorage.removeItem("istok_login_redirect");
+            sessionStorage.removeItem("istok_redirect_processed");
+            sessionStorage.removeItem("istok_redirect_processing");
+            // Continue to normal auth flow below
+          }
+        } catch (error) {
+          // Error during redirect finalization, clear flags and continue
+          console.error("[AUTH] Error finalizing redirect:", error);
+          sessionStorage.removeItem("istok_login_redirect");
+          sessionStorage.removeItem("istok_redirect_processed");
+          sessionStorage.removeItem("istok_redirect_processing");
+          // Continue to normal auth flow below
+        }
+      } else if (!redirectPending && redirectProcessed) {
+        // Clean up stale processing flags if redirect is no longer pending
+        sessionStorage.removeItem("istok_redirect_processed");
+        sessionStorage.removeItem("istok_redirect_processing");
       }
 
       if (auth && db) {
         unsub = onAuthStateChanged(auth, async (user) => {
           if (!user) {
+            // Clear redirect flags when user signs out
+            sessionStorage.removeItem("istok_login_redirect");
+            sessionStorage.removeItem("istok_redirect_processed");
+            sessionStorage.removeItem("istok_redirect_processing");
+            sessionStorage.removeItem("istok_redirect_success");
             setStage("WELCOME");
+            isInitializing = false;
+            return;
+          }
+
+          // Check if redirect was successfully processed - if so, skip this auth state change
+          // This prevents duplicate processing when onAuthStateChanged fires after redirect
+          const redirectSuccess = sessionStorage.getItem("istok_redirect_success") === "true";
+          if (redirectSuccess) {
+            // Redirect already processed the user, clear the flag and skip
+            console.log("[AUTH] Redirect already processed user, skipping onAuthStateChanged");
+            sessionStorage.removeItem("istok_redirect_success");
+            // Check if identity is already set from redirect
+            if (identity && identity.uid === user.uid) {
+              // Identity already set, don't process again
+              isInitializing = false;
+              return;
+            }
+            // Identity not set yet, continue to fetch it
+          }
+          
+          // Check if redirect is still pending or processing
+          const redirectPending = sessionStorage.getItem("istok_login_redirect") === "pending";
+          const redirectProcessing = sessionStorage.getItem("istok_redirect_processing") === "true";
+          
+          // If redirect is still pending or processing, wait for it to complete
+          if (redirectPending || redirectProcessing) {
+            // Let the redirect handler above process it first
+            // But set a timeout to prevent infinite waiting
+            setTimeout(() => {
+              const stillPending = sessionStorage.getItem("istok_login_redirect") === "pending";
+              const stillProcessing = sessionStorage.getItem("istok_redirect_processing") === "true";
+              if (stillPending || stillProcessing) {
+                console.warn("[AUTH] Redirect handler timeout, forcing auth state check");
+                sessionStorage.removeItem("istok_login_redirect");
+                sessionStorage.removeItem("istok_redirect_processed");
+                sessionStorage.removeItem("istok_redirect_processing");
+                sessionStorage.removeItem("istok_redirect_success");
+                // Trigger re-initialization
+                initFlow();
+              }
+            }, 3000);
+            isInitializing = false;
             return;
           }
 
@@ -250,15 +400,17 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
               const data = snap.data() as IStokUserIdentity;
               setIdentity(data);
 
-              if (isSystemPinConfigured()) {
+              // Always check PIN first - new users should setup PIN
+              if (!isSystemPinConfigured()) {
+                setStage("SETUP_PIN");
+              } else {
+                // Only go to LOCKED if PIN is already configured
                 if (bioEnabled && !isHardLocked) {
                   setStage("BIOMETRIC_SCAN");
                   handleBiometricScan();
                 } else {
                   setStage("LOCKED");
                 }
-              } else {
-                setStage("SETUP_PIN");
               }
             } else {
               const tmp: IStokUserIdentity = {
@@ -276,20 +428,46 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             console.error("Silent Restore Failed", e);
             setStage("WELCOME");
           }
+          isInitializing = false;
         });
       } else {
         setStage("WELCOME");
+        isInitializing = false;
       }
     };
 
-    initFlow();
+    initTimeoutId = setTimeout(initFlow, 100);
+    
+    // Safety timeout: if stuck in CHECKING for too long, force to WELCOME
+    const safetyTimeout = setTimeout(() => {
+      if (stage === "CHECKING") {
+        console.warn("[AUTH] Safety timeout: stuck in CHECKING, forcing to WELCOME");
+        // Clear any stale redirect flags
+        sessionStorage.removeItem("istok_login_redirect");
+        sessionStorage.removeItem("istok_redirect_processed");
+        sessionStorage.removeItem("istok_redirect_processing");
+        sessionStorage.removeItem("istok_redirect_success");
+        setStage("WELCOME");
+      }
+    }, 10000); // 10 seconds timeout
+    
     return () => {
       if (unsub) unsub();
+      if (initTimeoutId) clearTimeout(initTimeoutId);
+      clearTimeout(safetyTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identity?.istokId, bioEnabled, isHardLocked]);
 
   const handleGoogleLogin = async () => {
+    // Prevent multiple simultaneous attempts
+    if (loading || isAuthAttemptInProgress) return;
+
+    setIsAuthAttemptInProgress(true);
+    // Clear any stale flags before starting new login
+    sessionStorage.removeItem("istok_redirect_processed");
+    sessionStorage.removeItem("istok_redirect_processing");
+    sessionStorage.removeItem("istok_redirect_success");
     sessionStorage.setItem("istok_login_redirect", "pending");
     setLoading(true);
     setError(null);
@@ -298,25 +476,23 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
       const res = await IstokIdentityService.loginWithGoogle();
 
       if (res.status === "REDIRECT_STARTED") {
+        // For redirect flow, don't reset loading/attempt flags yet
+        // They will be cleared when redirect completes
+        // The page will reload after redirect, so state will reset
         return;
       }
+
+      // Clear redirect flag for non-redirect flows
+      sessionStorage.removeItem("istok_login_redirect");
+      sessionStorage.removeItem("istok_redirect_processed");
+      sessionStorage.removeItem("istok_redirect_processing");
+      sessionStorage.removeItem("istok_redirect_success");
 
       if (res.status === "SIGNED_IN") {
         const userProfile = res.identity;
 
         if (userProfile?.istokId) {
-          setIdentity(userProfile);
-
-          if (isSystemPinConfigured()) {
-            if (bioEnabled && !isHardLocked) {
-              setStage("BIOMETRIC_SCAN");
-              handleBiometricScan();
-            } else {
-              setStage("LOCKED");
-            }
-          } else {
-            setStage("SETUP_PIN");
-          }
+          handleAuthSuccess(userProfile);
           return;
         }
 
@@ -338,9 +514,18 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
       setNiceError("Login Failed");
     } catch (err: any) {
       setNiceError(err?.message || "Login Failed");
+      // Always clear flags on error
       sessionStorage.removeItem("istok_login_redirect");
+      sessionStorage.removeItem("istok_redirect_processed");
+      sessionStorage.removeItem("istok_redirect_processing");
+      sessionStorage.removeItem("istok_redirect_success");
     } finally {
-      setLoading(false);
+      // Only reset loading/attempt flags if not redirecting
+      const isRedirecting = sessionStorage.getItem("istok_login_redirect") === "pending";
+      if (!isRedirecting) {
+        setLoading(false);
+        setIsAuthAttemptInProgress(false);
+      }
     }
   };
 
@@ -501,13 +686,12 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
           }}
         >
           <div className={`w-full max-w-md ${shake ? "animate-[shake_0.5s_cubic-bezier(.36,.07,.19,.97)_both]" : ""}`}>
-            <div className={authStyles.card}>
+            <div className={`${authStyles.card} ${isTransitioning ? 'animate-scale-out' : ''}`}>
           {stage === "WELCOME" && (
             <div className="text-center space-y-7 animate-slide-up">
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-text-muted tracking-[0.24em] uppercase">ISTOIC</p>
-                <h1 className="text-3xl font-semibold text-text tracking-tight">Welcome back</h1>
-                <p className="text-sm text-text-muted">Secure access to your productivity workspace.</p>
+              <div className="space-y-3">
+                <p className="text-lg font-bold text-text tracking-[0.4em] uppercase">ISTOIC</p>
+                <h1 className="text-2xl font-semibold text-text tracking-tight">Sign in to your workspace</h1>
               </div>
 
               <div className="space-y-4">
@@ -535,32 +719,32 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                   Login dengan Email
                 </button>
 
-                <button
-                  onClick={() => setStage("REGISTER_MANUAL")}
-                  disabled={loading}
-                  className={authStyles.buttonGhost}
-                >
-                  Buat akun baru
-                </button>
-
-                <button
-                  onClick={() => setStage("FORGOT_ACCOUNT")}
-                  className="text-xs font-semibold text-text-muted hover:text-text transition-colors flex items-center gap-2 mx-auto"
-                >
-                  <HelpCircle size={12} /> Lupa akun?
-                </button>
-              </div>
-
-              {isSystemPinConfigured() && (
-                <div className="pt-2">
+                <div className="space-y-2 pt-2">
                   <button
-                    onClick={() => setStage("LOCKED")}
-                    className="text-xs font-semibold text-text-muted hover:text-text transition-colors flex items-center justify-center gap-2 mx-auto"
+                    onClick={() => setStage("REGISTER_MANUAL")}
+                    disabled={loading}
+                    className={authStyles.linkMuted + " mx-auto flex items-center gap-2"}
                   >
-                    <KeyRound size={12} /> Akses perangkat
+                    Buat akun baru
                   </button>
+
+                  <button
+                    onClick={() => setStage("FORGOT_ACCOUNT")}
+                    className="text-xs font-semibold text-text-muted hover:text-text transition-colors flex items-center gap-2 mx-auto"
+                  >
+                    <HelpCircle size={12} /> Lupa akun?
+                  </button>
+
+                  {isSystemPinConfigured() && (
+                    <button
+                      onClick={() => setStage("LOCKED")}
+                      className="text-xs font-semibold text-text-muted hover:text-text transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <KeyRound size={12} /> Akses perangkat
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
 
               {error && <div className={authStyles.alertError}>{error}</div>}
             </div>
@@ -726,20 +910,15 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             <LoginManual
               onBack={() => setStage("WELCOME")}
               onForgot={() => setStage("FORGOT_ACCOUNT")}
-              onSuccess={(newIdentity) => {
-                setIdentity(newIdentity);
-                setStage(isSystemPinConfigured() ? "LOCKED" : "SETUP_PIN");
-              }}
+              onSuccess={handleAuthSuccess}
             />
           )}
 
           {stage === "REGISTER_MANUAL" && (
             <RegisterManual
               onBack={() => setStage("WELCOME")}
-              onSuccess={(newIdentity) => {
-                setIdentity(newIdentity);
-                setStage("SETUP_PIN");
-              }}
+              onSuccess={handleAuthSuccess}
+              onGoogle={handleGoogleLogin}
             />
           )}
 

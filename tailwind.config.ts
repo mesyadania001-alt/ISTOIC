@@ -112,11 +112,17 @@ const config: Config = {
           'from': { opacity: '0' },
           'to': { opacity: '1' }
         },
-        'shimmer': {
-          '0%': { backgroundPosition: '-1000px 0' },
-          '100%': { backgroundPosition: '1000px 0' }
-        }
-      },
+        'scaleOut': {
+          'from': { transform: 'scale(1)', opacity: '1' },
+          'to': { transform: 'scale(0.98)', opacity: '0' }
+        },        'authExit': {
+          'from': { opacity: '1', transform: 'scale(1)' },
+          'to': { opacity: '0', transform: 'scale(0.96)' }
+        },
+        'dashboardEnter': {
+          'from': { opacity: '0', transform: 'translateY(8px)' },
+          'to': { opacity: '1', transform: 'translateY(0)' }
+        },      },
       animation: {
         'pulse-glow': 'pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'slide-up': 'slideUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
@@ -126,6 +132,9 @@ const config: Config = {
         'scale-in': 'scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
         'fade-in': 'fadeIn 0.6s ease-out forwards',
         'shimmer': 'shimmer 2s infinite',
+        'scale-out': 'scaleOut 0.2s ease-out forwards',
+        'auth-exit': 'authExit 180ms ease-out forwards',
+        'dashboard-enter': 'dashboardEnter 200ms ease-out forwards',
       }
     }
   },

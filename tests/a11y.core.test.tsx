@@ -9,6 +9,13 @@ import { ChatWindow } from '../features/aiChat/components/ChatWindow';
 
 expect.extend(toHaveNoViolations);
 
+// Type augmentation for jest-axe
+declare module 'vitest' {
+  interface Assertion<T = any> {
+    toHaveNoViolations(): T;
+  }
+}
+
 // Mock react-virtuoso similar to other tests
 vi.mock('react-virtuoso', () => {
   const React = require('react');

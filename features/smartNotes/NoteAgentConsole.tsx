@@ -1,272 +1,221 @@
-import React, { useState, useEffect } from 'react';
-import { X, Sparkles, ListTodo, Lightbulb, Library, Check, Loader2, ChevronLeft, Database } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Sparkles, Loader2, CheckCircle2, X, Brain, Archive, ListTodo, Lightbulb } from 'lucide-react';
 import { type Note } from '../../types';
 import { NOTE_AGENTS, type AgentType } from '../../services/noteAgentService';
-import { VectorDB } from '../../services/vectorDb';
+import { Dialog } from '../../components/ui/Dialog';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { Badge } from '../../components/ui/Badge';
-import { Dialog } from '../../components/ui/Dialog';
 import { cn } from '../../utils/cn';
+import { debugService } from '../../services/debugService';
+import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
 
 interface NoteAgentConsoleProps {
-    isOpen: boolean;
-    onClose: () => void;
-    notes: Note[];
-    onApplyUpdates: (updates: Partial<Note>[]) => void;
-    onAddTasks: (tasks: any[]) => void;
+  notes: Note[];
+  setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
+  isOpen: boolean;
+  onClose: () => void;
+  personaMode?: 'hanisah' | 'stoic';
 }
 
-export const NoteAgentConsole: React.FC<NoteAgentConsoleProps> = ({ isOpen, onClose, notes, onApplyUpdates, onAddTasks }) => {
-    const [mobileView, setMobileView] = useState<'MENU' | 'RESULT'>('MENU');
-    const [result, setResult] = useState<any>(null);
-    const [activeAgent, setActiveAgent] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [progress, setProgress] = useState(0);
+interface AgentCard {
+  id: AgentType;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  color: 'bento-purple' | 'bento-teal' | 'bento-orange' | 'bento-blue';
+}
 
-    useEffect(() => {
-        if (isOpen) {
-            setMobileView('MENU');
-            setResult(null);
-            setActiveAgent(null);
-            setProgress(0);
+const AGENTS: AgentCard[] = [
+  {
+    id: 'ORGANIZER',
+    name: 'Auto Organizer',
+    description: 'Rename, tag, and archive notes intelligently',
+    icon: <Archive size={20} />,
+    color: 'bento-purple'
+  },
+  {
+    id: 'INSIGHT',
+    name: 'Pattern Insight',
+    description: 'Discover themes and productivity patterns',
+    icon: <Lightbulb size={20} />,
+    color: 'bento-teal'
+  },
+  {
+    id: 'TASKS',
+    name: 'Task Extractor',
+    description: 'Extract and prioritize action items',
+    icon: <ListTodo size={20} />,
+    color: 'bento-orange'
+  },
+  {
+    id: 'MEMORY',
+    name: 'Memory Recall',
+    description: 'Find related notes by context',
+    icon: <Brain size={20} />,
+    color: 'bento-blue'
+  }
+];
+
+export const NoteAgentConsole: React.FC<NoteAgentConsoleProps> = ({
+  notes,
+  setNotes,
+  isOpen,
+  onClose,
+  personaMode = 'stoic'
+}) => {
+  const [activeAgent, setActiveAgent] = useState<AgentType | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleRunAgent = useCallback(async (agentId: AgentType) => {
+    setActiveAgent(agentId);
+    setIsProcessing(true);
+    setResult(null);
+    setError(null);
+
+    try {
+      debugService.logAction(UI_REGISTRY.NOTES_BTN_AGENT_CONSOLE, FN_REGISTRY.NOTE_BATCH_ACTION, agentId);
+
+      switch (agentId) {
+        case 'ORGANIZER': {
+          const updates = await NOTE_AGENTS.runOrganizer(notes, personaMode);
+          if (updates.length > 0) {
+            setNotes(prevNotes =>
+              prevNotes.map(note => {
+                const update = updates.find(u => u.id === note.id);
+                return update ? { ...note, ...update } : note;
+              })
+            );
+            setResult(`✅ Organized ${updates.length} note${updates.length > 1 ? 's' : ''}`);
+          } else {
+            setResult('ℹ️ No changes needed. Your notes are already well organized.');
+          }
+          break;
         }
-    }, [isOpen]);
 
-    const runAgent = async (type: AgentType) => {
-        setIsLoading(true);
-        setActiveAgent(type);
-        setMobileView('RESULT');
-        setResult(null);
-        
-        try {
-            if (type === 'ORGANIZER') {
-                const res = await NOTE_AGENTS.runOrganizer(notes, 'hanisah'); 
-                setResult(res);
-            } else if (type === 'INSIGHT') {
-                const res = await NOTE_AGENTS.runInsight(notes);
-                setResult(res);
-            } else if (type === 'TASKS') {
-                const res = await NOTE_AGENTS.runActionExtractor(notes);
-                setResult(res);
-            }
-        } catch (e) {
-            console.error(e);
-            setResult({ error: 'Agent execution failed.' });
-        } finally {
-            setIsLoading(false);
+        case 'INSIGHT': {
+          const insight = await NOTE_AGENTS.runInsight(notes);
+          setResult(insight);
+          break;
         }
-    };
 
-    const runIndexing = async () => {
-        setIsLoading(true);
-        setActiveAgent('INDEXING');
-        setMobileView('RESULT');
-        setProgress(0);
-
-        try {
-            const count = await VectorDB.indexNotes(notes, (current, total) => {
-                setProgress(Math.round((current / total) * 100));
-            });
-            setResult(`Indexed ${count} notes for semantic search.`);
-        } catch (e: any) {
-            setResult({ error: `Indexing failed: ${e.message}` });
-        } finally {
-            setIsLoading(false);
+        case 'TASKS': {
+          const tasks = await NOTE_AGENTS.runActionExtractor(notes);
+          if (tasks.length > 0) {
+            const taskList = tasks.map(t => `- ${t.text}`).join('\n');
+            setResult(`📋 Found ${tasks.length} task${tasks.length > 1 ? 's' : ''}:\n\n${taskList}`);
+          } else {
+            setResult('ℹ️ No actionable tasks found in your notes.');
+          }
+          break;
         }
-    };
 
-    const handleApply = () => {
-        if (!result) return;
-        if (activeAgent === 'ORGANIZER') {
-            onApplyUpdates(result);
-            onClose();
-        } else if (activeAgent === 'TASKS') {
-            onAddTasks(result);
-            onClose();
+        case 'MEMORY': {
+          // Memory recall needs a current note context, so we'll show a message
+          setResult('💡 Memory Recall works best when editing a note. It will suggest related notes automatically.');
+          break;
         }
-    };
 
-    if (!isOpen) return null;
+        default:
+          setError('Unknown agent type');
+      }
+    } catch (err: any) {
+      console.error('Agent execution failed:', err);
+      setError(err.message || 'Agent execution failed');
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [notes, setNotes, personaMode]);
 
-    return (
-        <Dialog open={isOpen} onClose={onClose} title="Note agents" size="full">
-            <div className="flex flex-col md:flex-row h-full min-h-[70vh]">
-                <aside className={cn(
-                    'w-full md:w-[320px] border-r border-border bg-surface-2/50 flex flex-col',
-                    mobileView === 'MENU' ? 'flex' : 'hidden md:flex'
-                )}>
-                    <div className="p-4 border-b border-border">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                                <div className="section-title text-text">Agents</div>
-                                <p className="caption text-text-muted">Automations for organizing notes.</p>
-                            </div>
-                            <Button onClick={onClose} variant="ghost" size="sm" className="md:hidden w-8 h-8 p-0" aria-label="Close">
-                                <X size={16} />
-                            </Button>
-                        </div>
-                    </div>
+  const handleClose = useCallback(() => {
+    setActiveAgent(null);
+    setResult(null);
+    setError(null);
+    setIsProcessing(false);
+    onClose();
+  }, [onClose]);
 
-                    <div className="flex-1 overflow-y-auto custom-scroll p-4 space-y-3 pb-safe">
-                        <AgentCard 
-                            label="Organizer" 
-                            desc="Rename, tag, and archive notes automatically." 
-                            icon={<Library size={18}/>} 
-                            onClick={() => runAgent('ORGANIZER')}
-                            isActive={activeAgent === 'ORGANIZER'}
-                        />
-                        <AgentCard 
-                            label="Insights" 
-                            desc="Surface themes and recurring topics." 
-                            icon={<Lightbulb size={18}/>} 
-                            onClick={() => runAgent('INSIGHT')}
-                            isActive={activeAgent === 'INSIGHT'}
-                        />
-                        <AgentCard 
-                            label="Tasks" 
-                            desc="Extract action items from notes." 
-                            icon={<ListTodo size={18}/>} 
-                            onClick={() => runAgent('TASKS')}
-                            isActive={activeAgent === 'TASKS'}
-                        />
-                        
-                        <div className="h-px bg-border" />
-                        
-                        <AgentCard 
-                            label="Semantic indexing" 
-                            desc="Prepare notes for semantic search." 
-                            icon={<Database size={18}/>} 
-                            onClick={runIndexing}
-                            isActive={activeAgent === 'INDEXING'}
-                        />
-                    </div>
-                </aside>
-
-                <section className={cn(
-                    'flex-1 flex flex-col bg-surface',
-                    mobileView === 'RESULT' ? 'flex' : 'hidden md:flex'
-                )}>
-                    <div className="md:hidden border-b border-border flex items-center justify-between px-4 py-3 pt-safe">
-                        <Button onClick={() => setMobileView('MENU')} variant="secondary" size="sm">
-                            <ChevronLeft size={16} /> Back
-                        </Button>
-                        <Button onClick={onClose} variant="ghost" size="sm" className="w-8 h-8 p-0" aria-label="Close">
-                            <X size={16} />
-                        </Button>
-                    </div>
-
-                    {isLoading ? (
-                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
-                            <div className="relative">
-                                <Loader2 size={32} className="animate-spin text-accent" />
-                            </div>
-                            <div>
-                                <h4 className="section-title text-text">
-                                    {activeAgent === 'INDEXING' ? 'Indexing notes' : 'Running agent'}
-                                </h4>
-                                <p className="caption text-text-muted">
-                                    {activeAgent === 'INDEXING' ? `Progress: ${progress}%` : `Processing ${notes.length} notes`}
-                                </p>
-                            </div>
-                        </div>
-                    ) : result ? (
-                        <div className="flex-1 flex flex-col overflow-hidden">
-                            <div className="p-4 border-b border-border bg-surface-2/40">
-                                <h3 className="section-title text-text">{activeAgent}</h3>
-                            </div>
-                            
-                            <div className="flex-1 overflow-y-auto custom-scroll p-4 md:p-6 pb-32 md:pb-6 space-y-4">
-                                {activeAgent === 'INDEXING' && typeof result === 'string' && (
-                                    <Card padding="lg" className="flex flex-col items-center text-center gap-3">
-                                        <div className="w-12 h-12 rounded-[var(--radius-md)] bg-success/10 text-success flex items-center justify-center">
-                                            <Check size={24} />
-                                        </div>
-                                        <div className="section-title text-text">Indexing complete</div>
-                                        <p className="body text-text-muted">{result}</p>
-                                    </Card>
-                                )}
-
-                                {activeAgent === 'ORGANIZER' && Array.isArray(result) && (
-                                    <div className="space-y-3">
-                                        <p className="caption text-text-muted">{result.length} updates proposed.</p>
-                                        {result.map((update: any, i: number) => (
-                                            <Card key={i} padding="md" className="space-y-2">
-                                                <div className="flex items-center gap-2">
-                                                    <Badge variant="accent">Update</Badge>
-                                                    <p className="caption text-text-muted">ID {update.id.slice(0, 6)}</p>
-                                                </div>
-                                                <p className="body text-text">{update.title}</p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {update.tags?.map((t: string) => (
-                                                        <Badge key={t} variant="neutral">{t}</Badge>
-                                                    ))}
-                                                    {update.is_archived && <Badge variant="warning">Archived</Badge>}
-                                                </div>
-                                            </Card>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {activeAgent === 'INSIGHT' && typeof result === 'string' && (
-                                    <Card padding="lg">
-                                        <pre className="whitespace-pre-wrap body text-text">{result}</pre>
-                                    </Card>
-                                )}
-
-                                {activeAgent === 'TASKS' && Array.isArray(result) && (
-                                    <div className="space-y-2">
-                                        {result.map((task: any, i: number) => (
-                                            <Card key={i} padding="sm" className="flex items-center gap-3">
-                                                <div className="w-4 h-4 rounded border border-border" />
-                                                <span className="body text-text">{task.text}</span>
-                                            </Card>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {activeAgent !== 'INSIGHT' && activeAgent !== 'INDEXING' && (
-                                <div className="border-t border-border bg-surface-2/60 p-4 pb-safe">
-                                    <Button onClick={handleApply} variant="primary" size="lg" className="w-full">
-                                        Apply changes
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 text-text-muted">
-                            <Sparkles size={32} />
-                            <p className="body">Select an agent to begin.</p>
-                        </div>
-                    )}
-                </section>
-            </div>
-        </Dialog>
-    );
-};
-
-const AgentCard: React.FC<{ 
-    label: string; desc: string; icon: React.ReactNode; onClick: () => void; isActive: boolean 
-}> = ({ label, desc, icon, onClick, isActive }) => (
-    <Card
-        as="button"
-        onClick={onClick}
-        interactive
-        padding="md"
-        className={cn('w-full text-left', isActive ? 'border-accent bg-accent/10' : '')}
+  return (
+    <Dialog
+      open={isOpen}
+      onClose={handleClose}
+      title="AI Agent Console"
+      size="lg"
+      footer={
+        <Button onClick={handleClose} variant="secondary">
+          Close
+        </Button>
+      }
     >
-        <div className="flex items-start gap-3">
-            <div className={cn(
-                'w-10 h-10 rounded-[var(--radius-md)] flex items-center justify-center border',
-                isActive ? 'bg-accent/15 text-accent border-accent/30' : 'bg-surface-2 text-text-muted border-border'
-            )}>
-                {icon}
-            </div>
-            <div className="space-y-1">
-                <div className="section-title text-text">{label}</div>
-                <p className="caption text-text-muted">{desc}</p>
-            </div>
+      <div className="space-y-6">
+        {/* Agent Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {AGENTS.map((agent) => (
+            <Card
+              key={agent.id}
+              tone={agent.color}
+              padding="bento"
+              interactive
+              bento
+              className={cn(
+                'bento-card cursor-pointer transition-all',
+                activeAgent === agent.id && 'ring-2 ring-accent/50',
+                isProcessing && activeAgent === agent.id && 'opacity-75'
+              )}
+              onClick={() => !isProcessing && handleRunAgent(agent.id)}
+            >
+              <div className="bento-card-content">
+                <div className="bento-card-icon mb-3">
+                  {agent.icon}
+                </div>
+                <h3 className="bento-card-title mb-2">{agent.name}</h3>
+                <p className="bento-card-description">{agent.description}</p>
+                {isProcessing && activeAgent === agent.id && (
+                  <div className="mt-3 flex items-center gap-2 text-sm">
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Processing...</span>
+                  </div>
+                )}
+              </div>
+            </Card>
+          ))}
         </div>
-    </Card>
-);
+
+        {/* Results Display */}
+        {(result || error) && (
+          <Card
+            padding="bento"
+            bento
+            className={cn(
+              'animate-slide-up',
+              error ? 'border-danger/30 bg-danger/5' : 'border-accent/30 bg-accent/5'
+            )}
+          >
+            <div className="flex items-start gap-3">
+              {error ? (
+                <X size={20} className="text-danger flex-shrink-0 mt-0.5" />
+              ) : (
+                <CheckCircle2 size={20} className="text-success flex-shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 min-w-0">
+                {error ? (
+                  <p className="text-sm text-danger font-medium">{error}</p>
+                ) : (
+                  <div className="text-sm text-text whitespace-pre-wrap">
+                    {result}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Info */}
+        <div className="text-xs text-text-muted/60 text-center">
+          Agents use AI to analyze and organize your notes. Results may vary.
+        </div>
+      </div>
+    </Dialog>
+  );
+};

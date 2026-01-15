@@ -15,37 +15,39 @@ const AIToolsView: React.FC = memo(() => {
 
     return (
         <div className="h-full w-full overflow-y-auto custom-scroll flex flex-col px-4 pb-32 pt-[calc(env(safe-area-inset-top)+1.5rem)] md:px-8 md:pt-12 md:pb-40 lg:px-12 animate-fade-in bg-bg relative z-10 overscroll-none">
-            <div className="max-w-6xl mx-auto w-full space-y-10 relative z-10">
-                <Card tone="translucent" padding="lg" className="animate-slide-up shadow-[0_30px_120px_-70px_rgba(var(--accent-rgb),0.9)] border-border/60">
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-                        <div className="space-y-3">
-                            <p className="caption text-text-muted">AI Tools</p>
-                            <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-2xl bg-[color:var(--accent)]/12 text-[color:var(--accent)] flex items-center justify-center">
-                                    <ImagePlus size={20} />
+            <div className="max-w-6xl mx-auto w-full space-y-[var(--bento-gap)] relative z-10">
+                <Card tone="bento-orange" padding="bento" bento className="bento-card animate-slide-up shadow-[var(--shadow-bento)]">
+                    <div className="bento-card-content">
+                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                            <div className="space-y-3">
+                                <p className="caption opacity-80">AI Tools</p>
+                                <div className="flex items-center gap-3">
+                                    <div className="bento-card-icon">
+                                        <ImagePlus size={24} />
+                                    </div>
+                                    <div>
+                                        <h1 className="bento-card-title text-3xl">Create and analyze</h1>
+                                        <p className="bento-card-description">Studio untuk generasi visual dan inspeksi dalam satu panel.</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h1 className="text-3xl font-black tracking-tight text-text">Create and analyze</h1>
-                                    <p className="body-sm text-text-muted">Studio untuk generasi visual dan inspeksi dalam satu panel.</p>
+                                <div className="flex gap-2 flex-wrap">
+                                    <Badge variant="success">Ready</Badge>
+                                    <Badge variant="neutral">Gen & Vision</Badge>
                                 </div>
                             </div>
-                            <div className="flex gap-2 flex-wrap">
-                                <Badge variant="success">Ready</Badge>
-                                <Badge variant="neutral">Gen & Vision</Badge>
-                            </div>
-                        </div>
 
-                        <Card padding="sm" className="flex items-center gap-3 border-border/70 shadow-[var(--shadow-soft)]">
-                            <Badge variant="success">Online</Badge>
-                            <div className="flex items-center gap-2 text-text-muted">
-                                <Activity size={14} />
-                                <span className="caption">Engines stable</span>
-                            </div>
-                        </Card>
+                            <Card tone="bento-solid-green" padding="sm" bento className="flex items-center gap-3 shadow-[var(--shadow-soft)]">
+                                <Badge variant="success">Online</Badge>
+                                <div className="flex items-center gap-2 opacity-90">
+                                    <Activity size={14} />
+                                    <span className="caption">Engines stable</span>
+                                </div>
+                            </Card>
+                        </div>
                     </div>
                 </Card>
 
-                <div className="space-y-6 transform-gpu pb-20">
+                <div className="bento-grid grid grid-cols-1 gap-[var(--bento-gap)] transform-gpu pb-20">
                     <GenerativeStudio 
                         isOpen={activeSection === 'GENERATIVE'} 
                         onToggle={() => toggleSection('GENERATIVE')}

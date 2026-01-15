@@ -62,6 +62,7 @@ export const NeuralLinkProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     persona: personaMode,
                     systemInstruction,
                     voiceName: voice,
+                    engine: 'GEMINI_REALTIME',
                     onStatusChange: (status) => {
                         setLiveStatus(status);
                         if (status === 'ERROR') setIsLiveMode(false);

@@ -1,115 +1,142 @@
 import React from 'react';
-import { X, Archive, FileJson, Bookmark, ArchiveRestore, ShieldAlert, CheckCheck, MinusCircle } from 'lucide-react';
+import { Archive, Trash2, Pin, PinOff, X, Check } from 'lucide-react';
 import { type Note } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { cn } from '../../utils/cn';
+import { debugService } from '../../services/debugService';
+import { UI_REGISTRY, FN_REGISTRY } from '../../constants/registry';
 
 interface NoteBatchActionsProps {
-    isSelectionMode: boolean;
-    selectedCount: number;
-    totalVisibleCount: number;
-    isViewingArchive: boolean;
-    selectedNotes: Note[];
-    onSelectAll: () => void;
-    onDeselectAll: () => void;
-    onDeleteSelected: () => void;
-    onArchiveSelected: () => void;
-    onPinSelected: () => void;
-    onCancel: () => void;
+  selectedIds: Set<string>;
+  notes: Note[];
+  onDeselectAll: () => void;
+  onBatchArchive: (ids: string[]) => void;
+  onBatchDelete: (ids: string[]) => void;
+  onBatchPin: (ids: string[]) => void;
+  onBatchUnpin: (ids: string[]) => void;
 }
 
 export const NoteBatchActions: React.FC<NoteBatchActionsProps> = ({
-    isSelectionMode,
-    selectedCount,
-    totalVisibleCount,
-    isViewingArchive,
-    selectedNotes,
-    onSelectAll,
-    onDeselectAll,
-    onDeleteSelected,
-    onArchiveSelected,
-    onPinSelected,
-    onCancel
+  selectedIds,
+  notes,
+  onDeselectAll,
+  onBatchArchive,
+  onBatchDelete,
+  onBatchPin,
+  onBatchUnpin,
 }) => {
-    const isVisible = isSelectionMode || selectedCount > 0;
-    const isAllSelected = selectedCount === totalVisibleCount && totalVisibleCount > 0;
+  const selectedCount = selectedIds.size;
+  const selectedNotes = notes.filter(n => selectedIds.has(n.id));
+  const allPinned = selectedNotes.every(n => n.is_pinned);
+  const allArchived = selectedNotes.every(n => n.is_archived);
 
-    const handleExport = () => {
-        if (selectedNotes.length === 0) return;
-        const dataStr = JSON.stringify(selectedNotes, null, 2);
-        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-        const exportFileDefaultName = `istoic_notes_export_${new Date().toISOString().slice(0,10)}.json`;
-        const linkElement = document.createElement('a');
-        linkElement.setAttribute('href', dataUri);
-        linkElement.setAttribute('download', exportFileDefaultName);
-        linkElement.click();
-    };
+  if (selectedCount === 0) return null;
 
-    return (
-        <div className={`
-            fixed left-1/2 -translate-x-1/2 z-[2000]
-            bottom-24 md:bottom-10 w-auto min-w-[320px] max-w-[95vw]
-            transition-all duration-300
-            ${isVisible ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-10 opacity-0 pointer-events-none'}
-        `}>
-            <Card
-                padding="sm"
-                className="flex items-center gap-3 pointer-events-auto"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <Button
-                    onClick={(e) => { e.stopPropagation(); isAllSelected ? onDeselectAll() : onSelectAll(); }}
-                    type="button"
-                    variant={isAllSelected ? 'primary' : 'secondary'}
-                    size="sm"
-                    className="h-10"
-                >
-                    {isAllSelected ? <MinusCircle size={16} /> : <CheckCheck size={16} />}
-                    {isAllSelected ? 'Clear' : 'Select all'}
-                </Button>
+  const handleArchive = () => {
+    debugService.logAction(UI_REGISTRY.NOTES_BTN_ARCHIVE_ITEM, FN_REGISTRY.NOTE_BATCH_ACTION, `ARCHIVE_${selectedCount}`);
+    onBatchArchive(Array.from(selectedIds));
+    onDeselectAll();
+  };
 
-                <div className="flex flex-col min-w-[90px]">
-                    <span className="caption text-text-muted">Selected</span>
-                    <span className="section-title text-text">{selectedCount} / {totalVisibleCount}</span>
-                </div>
+  const handleDelete = () => {
+    if (window.confirm(`Delete ${selectedCount} note${selectedCount > 1 ? 's' : ''}? This cannot be undone.`)) {
+      debugService.logAction(UI_REGISTRY.NOTES_BTN_DELETE_ITEM, FN_REGISTRY.NOTE_BATCH_ACTION, `DELETE_${selectedCount}`);
+      onBatchDelete(Array.from(selectedIds));
+      onDeselectAll();
+    }
+  };
 
-                <div className="w-px h-8 bg-border" />
+  const handlePin = () => {
+    debugService.logAction(UI_REGISTRY.NOTES_BTN_PIN_ITEM, FN_REGISTRY.NOTE_BATCH_ACTION, `PIN_${selectedCount}`);
+    onBatchPin(Array.from(selectedIds));
+    onDeselectAll();
+  };
 
-                <div className="flex items-center gap-2">
-                    <ActionButton icon={<Bookmark size={16} />} label="Pin" onClick={onPinSelected} disabled={selectedCount === 0} />
-                    <ActionButton icon={isViewingArchive ? <ArchiveRestore size={16} /> : <Archive size={16} />} label={isViewingArchive ? 'Restore' : 'Archive'} onClick={onArchiveSelected} disabled={selectedCount === 0} />
-                    <ActionButton icon={<FileJson size={16} />} label="Export" onClick={handleExport} disabled={selectedCount === 0} />
-                    <div className="w-px h-6 bg-border" />
-                    <ActionButton icon={<ShieldAlert size={16} />} label="Delete" onClick={onDeleteSelected} variant="danger" disabled={selectedCount === 0} />
-                </div>
+  const handleUnpin = () => {
+    debugService.logAction(UI_REGISTRY.NOTES_BTN_PIN_ITEM, FN_REGISTRY.NOTE_BATCH_ACTION, `UNPIN_${selectedCount}`);
+    onBatchUnpin(Array.from(selectedIds));
+    onDeselectAll();
+  };
 
-                <Button
-                    onClick={(e) => { e.stopPropagation(); onCancel(); }}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="w-8 h-8 p-0"
-                    aria-label="Close"
-                >
-                    <X size={14} />
-                </Button>
-            </Card>
-        </div>
-    );
-};
-
-const ActionButton: React.FC<{ icon: React.ReactNode, label: string, onClick: () => void, variant?: 'normal' | 'danger', disabled?: boolean }> = ({ icon, label, onClick, variant = 'normal', disabled }) => (
-    <Button 
-        onClick={(e) => { e.stopPropagation(); e.preventDefault(); if (!disabled) onClick(); }}
-        disabled={disabled}
-        type="button"
-        variant={variant === 'danger' ? 'destructive' : 'secondary'}
-        size="sm"
-        className={cn('w-10 h-10 p-0', variant === 'danger' ? '' : 'text-text-muted')}
-        aria-label={label}
-        title={label}
+  return (
+    <Card
+      padding="md"
+      bento
+      className={cn(
+        'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
+        'animate-slide-up shadow-[var(--shadow-strong)]',
+        'border-border/60 bg-surface/95 backdrop-blur-xl',
+        'max-w-md w-[calc(100%-2rem)]',
+        'safe-b'
+      )}
     >
-        {icon}
-    </Button>
-);
+      <div className="flex items-center justify-between gap-4">
+        {/* Selection Count */}
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center">
+            <Check size={16} className="text-accent" />
+          </div>
+          <span className="section-title text-text">
+            {selectedCount} selected
+          </span>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          {allPinned ? (
+            <Button
+              onClick={handleUnpin}
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 p-0 text-text-muted hover:bg-surface-2 hover:text-text"
+              aria-label="Unpin selected"
+            >
+              <PinOff size={16} strokeWidth={1.8} />
+            </Button>
+          ) : (
+            <Button
+              onClick={handlePin}
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 p-0 text-text-muted hover:bg-surface-2 hover:text-text"
+              aria-label="Pin selected"
+            >
+              <Pin size={16} strokeWidth={1.8} />
+            </Button>
+          )}
+
+          <Button
+            onClick={handleArchive}
+            variant="ghost"
+            size="sm"
+            className="h-9 w-9 p-0 text-text-muted hover:bg-surface-2 hover:text-text"
+            aria-label={allArchived ? 'Unarchive selected' : 'Archive selected'}
+          >
+            <Archive size={16} strokeWidth={1.8} />
+          </Button>
+
+          <Button
+            onClick={handleDelete}
+            variant="ghost"
+            size="sm"
+            className="h-9 w-9 p-0 text-text-muted hover:bg-danger/10 hover:text-danger"
+            aria-label="Delete selected"
+          >
+            <Trash2 size={16} strokeWidth={1.8} />
+          </Button>
+
+          <Button
+            onClick={onDeselectAll}
+            variant="ghost"
+            size="sm"
+            className="h-9 w-9 p-0 text-text-muted hover:bg-surface-2 hover:text-text"
+            aria-label="Deselect all"
+          >
+            <X size={16} strokeWidth={1.8} />
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+};

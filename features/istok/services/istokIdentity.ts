@@ -44,7 +44,7 @@ export type GoogleLoginResult =
   | { status: "CANCELLED"; message: string }
   | { status: "ERROR"; message: string };
 
-const AUTH_TIMEOUT_MS = 15000;
+const AUTH_TIMEOUT_MS = 20000;
 
 function isNative(): boolean {
   return Capacitor.isNativePlatform();
@@ -60,17 +60,55 @@ function isIosPwa(): boolean {
   return isIos && isStandalone;
 }
 
+function shouldUseRedirect(): boolean {
+  // Always use redirect for native and iOS PWA
+  if (isNative() || isIosPwa()) return true;
+  
+  // Check for COOP policy that blocks popups
+  try {
+    // Test if window.closed is accessible (COOP blocks this)
+    const testWindow = window.open('', '_blank');
+    if (testWindow) {
+      try {
+        const closed = testWindow.closed;
+        testWindow.close();
+      } catch {
+        // COOP blocks window.closed access
+        return true;
+      }
+    }
+  } catch {
+    // Popup blocked or COOP policy active
+    return true;
+  }
+  
+  return false;
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs = AUTH_TIMEOUT_MS): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Request timeout. Please try again.")), timeoutMs);
+    let isResolved = false;
+    const timer = setTimeout(() => {
+      if (!isResolved) {
+        isResolved = true;
+        reject(new Error("Request timeout. Please try again."));
+      }
+    }, timeoutMs);
+    
     promise
       .then((value) => {
-        clearTimeout(timer);
-        resolve(value);
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          resolve(value);
+        }
       })
       .catch((error) => {
-        clearTimeout(timer);
-        reject(error);
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          reject(error);
+        }
       });
   });
 }
@@ -160,26 +198,45 @@ export const IstokIdentityService = {
     await ensureAuthPersistence("local");
 
     try {
-      if (isNative() || isIosPwa()) {
+      // Use redirect for native, iOS PWA, or when COOP blocks popups
+      if (shouldUseRedirect()) {
         await signInWithRedirect(auth, googleProvider);
         return { status: "REDIRECT_STARTED" };
       }
 
-      const result = await withTimeout(signInWithPopup(auth, googleProvider));
-      const user = result.user;
+      // Try popup first, fallback to redirect on COOP error
+      try {
+        const result = await withTimeout(signInWithPopup(auth, googleProvider));
+        const user = result.user;
 
-      const existing = await fetchProfile(user.uid);
-      if (existing) return { status: "SIGNED_IN", identity: existing };
+        const existing = await fetchProfile(user.uid);
+        if (existing) return { status: "SIGNED_IN", identity: existing };
 
-      const base = normalizeUser(user);
-      return {
-        status: "SIGNED_IN",
-        identity: {
-          ...base,
-          istokId: "",
-          codename: "",
-        },
-      };
+        const base = normalizeUser(user);
+        return {
+          status: "SIGNED_IN",
+          identity: {
+            ...base,
+            istokId: "",
+            codename: "",
+          },
+        };
+      } catch (popupErr: any) {
+        // If popup fails due to COOP or popup blocked, fallback to redirect
+        const errMsg = String(popupErr?.message || "");
+        if (
+          errMsg.includes("Cross-Origin-Opener-Policy") ||
+          errMsg.includes("window.closed") ||
+          errMsg.includes("popup-blocked") ||
+          popupErr?.code === "auth/popup-blocked"
+        ) {
+          debugService.log("INFO", "ISTOK_AUTH", "POPUP_BLOCKED_FALLBACK", "Falling back to redirect");
+          await signInWithRedirect(auth, googleProvider);
+          return { status: "REDIRECT_STARTED" };
+        }
+        // Re-throw other errors
+        throw popupErr;
+      }
     } catch (err: any) {
       const msg = friendlyAuthError(err);
       if (msg.includes("cancelled")) {
@@ -191,27 +248,68 @@ export const IstokIdentityService = {
   },
 
   finalizeRedirectIfAny: async (): Promise<IStokUserIdentity | null> => {
-    if (!auth || !db) return null;
+    if (!auth || !db) {
+      sessionStorage.removeItem("istok_login_redirect");
+      sessionStorage.removeItem("istok_redirect_processing");
+      return null;
+    }
 
-    await ensureAuthPersistence("local");
+    // Prevent multiple simultaneous calls
+    const redirectKey = "istok_redirect_processing";
+    if (sessionStorage.getItem(redirectKey) === "true") {
+      // Wait a bit if already processing
+      await new Promise(resolve => setTimeout(resolve, 500));
+      // Check again - if still processing, return null to avoid deadlock
+      if (sessionStorage.getItem(redirectKey) === "true") {
+        console.warn("[ISTOK_AUTH] Redirect already being processed, skipping");
+        return null;
+      }
+    }
+    sessionStorage.setItem(redirectKey, "true");
 
     try {
-      const result = await withTimeout(getRedirectResult(auth));
-      if (!result?.user) return null;
+      await ensureAuthPersistence("local");
+
+      const result = await withTimeout(getRedirectResult(auth), 8000);
+      if (!result?.user) {
+        // Clear flags if no result
+        sessionStorage.removeItem("istok_login_redirect");
+        sessionStorage.removeItem(redirectKey);
+        console.log("[ISTOK_AUTH] No redirect result found");
+        return null;
+      }
 
       const user = result.user;
       const existing = await fetchProfile(user.uid);
-      if (existing) return existing;
+      
+      // Always clear flags before returning
+      sessionStorage.removeItem("istok_login_redirect");
+      sessionStorage.removeItem(redirectKey);
+      
+      if (existing) {
+        console.log("[ISTOK_AUTH] Redirect finalized, user found:", existing.istokId);
+        // Persist identity immediately to ensure it's saved
+        await persistIdentity(existing);
+        return existing;
+      }
 
       const base = normalizeUser(user);
-      return {
+      const newUserIdentity = {
         ...base,
         istokId: "",
         codename: "",
       };
+      console.log("[ISTOK_AUTH] Redirect finalized, new user:", user.uid);
+      // Persist the base identity even for new users
+      await persistIdentity(newUserIdentity);
+      return newUserIdentity;
     } catch (err: any) {
       const msg = friendlyAuthError(err);
       debugService.log("WARN", "ISTOK_AUTH", "REDIRECT_FINALIZE_FAIL", msg);
+      // Always clear flags on error to prevent infinite loops
+      sessionStorage.removeItem("istok_login_redirect");
+      sessionStorage.removeItem(redirectKey);
+      console.error("[ISTOK_AUTH] Error finalizing redirect:", err);
       return null;
     }
   },

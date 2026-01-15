@@ -9,9 +9,9 @@ import {
   Pilcrow
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { HANISAH_KERNEL } from '../../services/melsaKernel';
-import { type TaskItem } from '../../types';
-import { TRANSLATIONS, getLang } from '../../services/i18n';
+import { HANISAH_KERNEL } from './melsaKernel';
+import { type TaskItem } from '../types';
+import { TRANSLATIONS, getLang } from './i18n';
 import { sanitizeInput } from '../utils/securityHelper';
 
 interface AdvancedEditorProps {

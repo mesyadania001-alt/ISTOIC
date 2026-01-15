@@ -19,11 +19,11 @@ const KEY_LENGTH = 256;
 const getPasswordKey = (password: string) => 
   crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
 
-const deriveKey = async (passwordKey: CryptoKey, salt: BufferSource, usage: ["encrypt"] | ["decrypt"]) => 
+const deriveKey = async (passwordKey: CryptoKey, salt: BufferSource | Uint8Array, usage: ["encrypt"] | ["decrypt"]) => 
   crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt: salt,
+      salt: salt as BufferSource,
       iterations: KDF_ITERATIONS, 
       hash: HASH_ALGO,
     },
@@ -43,7 +43,11 @@ const bufferToBase64 = (buf: ArrayBuffer): string => {
 const base64ToBuffer = (base64: string): Uint8Array => {
     try {
         const binString = atob(base64);
-        return Uint8Array.from(binString, (m) => m.codePointAt(0)!);
+        const bytes = new Uint8Array(binString.length);
+        for (let i = 0; i < binString.length; i++) {
+            bytes[i] = binString.charCodeAt(i);
+        }
+        return bytes;
     } catch (e) {
         console.error("Crypto Decode Error: Invalid Base64");
         return new Uint8Array(0);
@@ -138,7 +142,7 @@ export const encryptData = async (plainText: string, secret: string): Promise<st
         
         // 2. Derive Key (Expensive Operation)
         const passwordKey = await getPasswordKey(secret);
-        const aesKey = await deriveKey(passwordKey, salt, ["encrypt"]);
+        const aesKey = await deriveKey(passwordKey, salt as BufferSource, ["encrypt"]);
         
         // 3. Encrypt
         const encryptedContent = await crypto.subtle.encrypt(
@@ -150,8 +154,8 @@ export const encryptData = async (plainText: string, secret: string): Promise<st
         // 4. Pack
         const packageData = {
             v: 1, // Versioning for future upgrades
-            salt: bufferToBase64(salt),
-            iv: bufferToBase64(iv),
+            salt: bufferToBase64(salt.buffer),
+            iv: bufferToBase64(iv.buffer),
             cipher: bufferToBase64(encryptedContent)
         };
 
@@ -177,12 +181,12 @@ export const decryptData = async (packageJson: string, secret: string): Promise<
         const cipher = base64ToBuffer(pkg.cipher);
 
         const passwordKey = await getPasswordKey(secret);
-        const aesKey = await deriveKey(passwordKey, salt, ["decrypt"]);
+        const aesKey = await deriveKey(passwordKey, salt as BufferSource, ["decrypt"]);
 
         const decryptedContent = await crypto.subtle.decrypt(
-            { name: CIPHER_ALGO, iv: iv },
+            { name: CIPHER_ALGO, iv: iv as BufferSource },
             aesKey,
-            cipher
+            cipher as BufferSource
         );
 
         return dec.decode(decryptedContent);
