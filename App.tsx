@@ -412,8 +412,12 @@ const App: React.FC = (): React.ReactElement => {
                 clearIncoming();
                 return;
             }
-            if (sessionMode === 'ISTOK' || sessionMode === 'TELEPONAN') {
-                setSessionMode('ISTOIC');
+            if (sessionMode === 'TELEPONAN') {
+                setSessionMode('ISTOK');
+                return;
+            }
+            if (sessionMode === 'ISTOK') {
+                setSessionMode('SELECT');
                 return;
             }
             if (sessionMode === 'ISTOIC') {
@@ -457,7 +461,7 @@ const App: React.FC = (): React.ReactElement => {
                 </div>
             );
         }
-        if (sessionMode === 'ISTOIC') {
+        if (sessionMode === 'ISTOK') {
             return (
                 <div className={`fixed inset-0 z-[9999] ${isTransitioning ? 'animate-dashboard-enter' : ''}`}>
                     <Suspense
@@ -484,9 +488,36 @@ const App: React.FC = (): React.ReactElement => {
                     }
                 >
                     <ErrorBoundary viewName="TELEPONAN_SECURE_CALL">
-                        <TeleponanView onClose={() => setSessionMode('ISTOIC')} />
+                        <TeleponanView onClose={() => setSessionMode('ISTOK')} />
                     </ErrorBoundary>
                 </Suspense>
+            );
+        }
+        if (sessionMode === 'ISTOIC') {
+            return (
+                <div className={`absolute inset-0 z-[9999] ${isTransitioning ? 'animate-dashboard-enter' : ''}`}>
+                    <GenerativeSessionProvider>
+                        <LiveSessionProvider notes={notes} setNotes={setNotes}>
+                            {incomingConnection && (
+                                <ConnectionNotification 
+                                    identity={requestIdentity}
+                                    peerId={incomingConnection.conn.peer}
+                                    onAccept={() => handleAcceptConnection(incomingConnection)}
+                                    onDecline={() => { incomingConnection.conn.close(); clearIncoming(); }}
+                                    isProcessing={!incomingConnection.firstData} 
+                                />
+                            )}
+                            <AppContent 
+                                notes={notes} 
+                                setNotes={setNotes} 
+                                isDebugOpen={isDebugOpen} 
+                                setIsDebugOpen={setIsDebugOpen} 
+                                userName={identity?.displayName || identity?.codename || 'Account'}
+                                onLogout={handleLogout}
+                            />
+                        </LiveSessionProvider>
+                    </GenerativeSessionProvider>
+                </div>
             );
         }
         return (

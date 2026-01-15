@@ -61,41 +61,19 @@ if (Capacitor.isNativePlatform()) {
 
 /**
  * Handle redirect result for PWA (especially iOS PWA)
- * This ensures redirect login completes properly after returning from Google
+ * NOTE: We don't call getRedirectResult here to avoid consuming it before AuthView can process it.
+ * AuthView will handle the redirect through finalizeRedirectIfAny() which properly manages the flow.
+ * This section only ensures the redirect flag is set if we detect a redirect return.
  */
 if (!Capacitor.isNativePlatform() && isIosPwa()) {
-  // Check for redirect result immediately on load
-  // Only check if redirect is pending to avoid unnecessary checks
+  // Check if we're returning from a redirect by looking at URL params or session flag
   const redirectPending = sessionStorage.getItem("istok_login_redirect") === "pending";
   
   if (redirectPending) {
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) {
-          console.log('[PWA_REDIRECT] User signed in via redirect');
-          // Clear any stale flags
-          sessionStorage.removeItem("istok_login_redirect");
-          sessionStorage.removeItem("istok_redirect_processed");
-          sessionStorage.removeItem("istok_redirect_processing");
-          // Set a flag to indicate redirect was handled at index level
-          sessionStorage.setItem("istok_redirect_handled", "true");
-          // Reload to trigger auth state update
-          window.location.reload();
-        } else {
-          // No result, clear flags to prevent loop
-          console.log('[PWA_REDIRECT] No redirect result found');
-          sessionStorage.removeItem("istok_login_redirect");
-          sessionStorage.removeItem("istok_redirect_processed");
-          sessionStorage.removeItem("istok_redirect_processing");
-        }
-      })
-      .catch((error) => {
-        console.warn('[PWA_REDIRECT] No redirect result or error:', error);
-        // Clear flags on error to prevent loops
-        sessionStorage.removeItem("istok_login_redirect");
-        sessionStorage.removeItem("istok_redirect_processed");
-        sessionStorage.removeItem("istok_redirect_processing");
-      });
+    // Just log that we detected a redirect return - let AuthView handle the actual processing
+    console.log('[PWA_REDIRECT] Detected redirect return, AuthView will process it');
+    // Don't call getRedirectResult here - let AuthView do it through finalizeRedirectIfAny
+    // This prevents consuming the redirect result before AuthView can use it
   }
 }
 

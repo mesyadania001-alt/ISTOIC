@@ -288,16 +288,21 @@ export const IstokIdentityService = {
       
       if (existing) {
         console.log("[ISTOK_AUTH] Redirect finalized, user found:", existing.istokId);
+        // Persist identity immediately to ensure it's saved
+        await persistIdentity(existing);
         return existing;
       }
 
       const base = normalizeUser(user);
-      console.log("[ISTOK_AUTH] Redirect finalized, new user:", user.uid);
-      return {
+      const newUserIdentity = {
         ...base,
         istokId: "",
         codename: "",
       };
+      console.log("[ISTOK_AUTH] Redirect finalized, new user:", user.uid);
+      // Persist the base identity even for new users
+      await persistIdentity(newUserIdentity);
+      return newUserIdentity;
     } catch (err: any) {
       const msg = friendlyAuthError(err);
       debugService.log("WARN", "ISTOK_AUTH", "REDIRECT_FINALIZE_FAIL", msg);

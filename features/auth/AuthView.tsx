@@ -287,9 +287,16 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             sessionStorage.removeItem("istok_redirect_processed");
             sessionStorage.removeItem("istok_redirect_processing");
             
+            // Set flag to indicate redirect was successfully processed
+            // This prevents onAuthStateChanged from processing the same user again
+            sessionStorage.setItem("istok_redirect_success", "true");
+            
+            // Persist identity immediately to ensure it's saved
+            // finalizeRedirectIfAny already persists, but we ensure it here too
+            setIdentity(redirectIdentity);
+            
             if (redirectIdentity.istokId) {
-              setIdentity(redirectIdentity);
-
+              // User has existing profile
               // Always check PIN first - new users should setup PIN
               if (!isSystemPinConfigured()) {
                 setStage("SETUP_PIN");
@@ -306,6 +313,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
               return;
             }
 
+            // New user, needs to create identity
             setPendingGoogleUser(redirectIdentity);
             setStage("CREATE_ID");
             isInitializing = false;
@@ -339,16 +347,33 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             sessionStorage.removeItem("istok_login_redirect");
             sessionStorage.removeItem("istok_redirect_processed");
             sessionStorage.removeItem("istok_redirect_processing");
+            sessionStorage.removeItem("istok_redirect_success");
             setStage("WELCOME");
             isInitializing = false;
             return;
           }
 
-          // Skip redirect check if user is already authenticated
-          // This prevents loops when auth state changes after redirect
+          // Check if redirect was successfully processed - if so, skip this auth state change
+          // This prevents duplicate processing when onAuthStateChanged fires after redirect
+          const redirectSuccess = sessionStorage.getItem("istok_redirect_success") === "true";
+          if (redirectSuccess) {
+            // Redirect already processed the user, clear the flag and skip
+            console.log("[AUTH] Redirect already processed user, skipping onAuthStateChanged");
+            sessionStorage.removeItem("istok_redirect_success");
+            // Check if identity is already set from redirect
+            if (identity && identity.uid === user.uid) {
+              // Identity already set, don't process again
+              isInitializing = false;
+              return;
+            }
+            // Identity not set yet, continue to fetch it
+          }
+          
+          // Check if redirect is still pending or processing
           const redirectPending = sessionStorage.getItem("istok_login_redirect") === "pending";
           const redirectProcessing = sessionStorage.getItem("istok_redirect_processing") === "true";
           
+          // If redirect is still pending or processing, wait for it to complete
           if (redirectPending || redirectProcessing) {
             // Let the redirect handler above process it first
             // But set a timeout to prevent infinite waiting
@@ -360,6 +385,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                 sessionStorage.removeItem("istok_login_redirect");
                 sessionStorage.removeItem("istok_redirect_processed");
                 sessionStorage.removeItem("istok_redirect_processing");
+                sessionStorage.removeItem("istok_redirect_success");
                 // Trigger re-initialization
                 initFlow();
               }
@@ -420,6 +446,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         sessionStorage.removeItem("istok_login_redirect");
         sessionStorage.removeItem("istok_redirect_processed");
         sessionStorage.removeItem("istok_redirect_processing");
+        sessionStorage.removeItem("istok_redirect_success");
         setStage("WELCOME");
       }
     }, 10000); // 10 seconds timeout
@@ -440,6 +467,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
     // Clear any stale flags before starting new login
     sessionStorage.removeItem("istok_redirect_processed");
     sessionStorage.removeItem("istok_redirect_processing");
+    sessionStorage.removeItem("istok_redirect_success");
     sessionStorage.setItem("istok_login_redirect", "pending");
     setLoading(true);
     setError(null);
@@ -458,6 +486,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
       sessionStorage.removeItem("istok_login_redirect");
       sessionStorage.removeItem("istok_redirect_processed");
       sessionStorage.removeItem("istok_redirect_processing");
+      sessionStorage.removeItem("istok_redirect_success");
 
       if (res.status === "SIGNED_IN") {
         const userProfile = res.identity;
@@ -489,6 +518,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
       sessionStorage.removeItem("istok_login_redirect");
       sessionStorage.removeItem("istok_redirect_processed");
       sessionStorage.removeItem("istok_redirect_processing");
+      sessionStorage.removeItem("istok_redirect_success");
     } finally {
       // Only reset loading/attempt flags if not redirecting
       const isRedirecting = sessionStorage.getItem("istok_login_redirect") === "pending";
